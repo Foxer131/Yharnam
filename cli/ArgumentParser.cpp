@@ -1,6 +1,6 @@
 #include <iostream>
 #include "ArgumentParser.h"
-#include "Attacks.h"
+#include "../attacks/Attacks.h"
 
 ArgumentParser::ArgumentParser() {}
 
@@ -9,6 +9,7 @@ User ArgumentParser::getUser() const { return user; }
 std::string ArgumentParser::getDC() const { return DC; }
 std::string ArgumentParser::getIP() const { return ip; }
 AttackMethod ArgumentParser::getAttackMethod() const { return attackMethod; }
+std::string ArgumentParser::getFilePath() const { return file_path; }
 
 void ArgumentParser::printHelp() {
     std::cerr << "Yharnam LDAP Enumerator" << std::endl;
@@ -17,8 +18,9 @@ void ArgumentParser::printHelp() {
     std::cerr << "  <target_ip>        IP address of the target LDAP server." << std::endl;
     std::cerr << "  -u, --username     Username for authentication (e.g., 'domain\\user')." << std::endl;
     std::cerr << "  -p, --password     Password for authentication." << std::endl;
-    std::cerr << "  -dc, --domain      The Base DN of the domain (e.g., 'DC=corp,DC=local')." << std::endl;
-}
+    std::cerr << "  -dc, --domain      The domain controller path (eg: yharnam.local)." << std::endl;
+    std::cerr << "  -outputfile        Output file containing hashes captured" << std::endl;
+}   
 
 constexpr unsigned int hash(std::string_view str) {
     unsigned int hash = 0;
@@ -59,6 +61,10 @@ bool ArgumentParser::parse(int& argc, char* argv[]) {
                 break;
             case hash("--asreproast"):
                 attackMethod = ASREPROAST;
+                break;
+            case hash("-outputfile"):
+                if (i + 1 < argc)
+                    file_path = argv[++i];
                 break;
         }
     }

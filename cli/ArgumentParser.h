@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include "Attacks.h"
+#include "../attacks/Attacks.h"
 
 typedef struct {
     std::string password;
@@ -12,6 +12,7 @@ class ArgumentParser {
     User user;
     std::string DC;
     std::string ip;
+    std::string file_path;
     AttackMethod attackMethod = NONE;
 
 public:
@@ -21,6 +22,7 @@ public:
     User getUser() const;
     std::string getDC() const;
     std::string getIP() const;
+    std::string getFilePath() const;
     AttackMethod getAttackMethod() const;
     void printHelp();
     bool parse(int& argc, char* argv[]);

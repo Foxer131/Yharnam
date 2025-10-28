@@ -53,6 +53,10 @@
         "typeinfo": "cpp",
         "variant": "cpp",
         "queue": "cpp",
-        "text_encoding": "cpp"
+        "text_encoding": "cpp",
+        "cstring": "cpp",
+        "iomanip": "cpp",
+        "sstream": "cpp",
+        "fstream": "cpp"
     }
 }

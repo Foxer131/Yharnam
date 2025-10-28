@@ -1,6 +1,6 @@
 #include <iostream>
 #include "Attacks.h"
-#include "LDAPConnection.h"
+#include "../connections/LDAPConnection.h"
 #include <vector>
 #include <string>
 

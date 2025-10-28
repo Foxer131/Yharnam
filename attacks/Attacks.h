@@ -2,7 +2,7 @@
 
 #include <vector>
 #include <string>
-#include "LDAPConnection.h"
+#include "../connections/LDAPConnection.h"
 
 enum AttackMethod {
     KERBEROAST,
@@ -19,7 +19,7 @@ namespace Attacks {
         Kerberoast(LDAPConnection& _conn);
         std::vector<std::string> listUser(const std::string& baseDN);
         std::string requestTicket(const std::vector<std::string>& spns);
-        bool requestTicket(const std::string& spn, const std::string& username, const std::string& password);
+        std::pair<std::string, std::string> requestTicket(const std::string& spn, const std::string& username, bool to_file);
     };
 
     class ASREPRoast {

