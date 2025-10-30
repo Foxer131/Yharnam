@@ -19,11 +19,13 @@ int main(int argc, char* argv[]) {
     if (!parser.parse(argc, argv))
         return 0;
 
+    
+        
     std::string target_ip = parser.getIP();
     User _u = parser.getUser();
     std::string username = _u.username;
     std::string password = _u.password;
-
+        
     const std::string baseDN = parser.makeBaseDN();
 
     std::cout << "--- Yharnam LDAP Enumerator ---" << std::endl;
@@ -32,9 +34,9 @@ int main(int argc, char* argv[]) {
     if (!connection.connect(target_ip))
         return 1;
 
-    std::cout << Colors::COLOR_BLUE << "[+] Connection established \t\t\t" << parser.getIP() << Colors::COLOR_RESET << std::endl;
+    std::cout << Colors::COLOR_BLUE << "[+] Connection established \t\t\t\t" << parser.getIP() << Colors::COLOR_RESET << std::endl;
     if (connection.bind(username, password)) {
-        std::cout << Colors::COLOR_GREEN << "[*] Authenticated successfully \t\t\t" << username << ":" << password << Colors::COLOR_RESET << std::endl;
+        std::cout << Colors::COLOR_GREEN << "[*] Authenticated successfully \t\t\t\t" << username << ":" << password << Colors::COLOR_RESET << std::endl;
         
         if (parser.getAttackMethod() == AttackMethod::NONE) {
 
@@ -67,8 +69,8 @@ int main(int argc, char* argv[]) {
             std::cout << Colors::COLOR_BLUE << "\nFinishing attack" << Colors::COLOR_RESET;
         }
     } else {
-        std::cout << Colors::COLOR_RED << "[-] Authentication failed \t" << username << ":" << password << Colors::COLOR_RESET << std::endl;
+        std::cout << Colors::COLOR_RED << "[-] Authentication failed \t\t\t\t" << username << ":" << password << Colors::COLOR_RESET << std::endl;
     }
-    std::cout << "\nEyes...";
+    std::cout << "\nEyes..." << std::endl;
     return 0;
 }

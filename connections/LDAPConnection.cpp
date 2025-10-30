@@ -70,7 +70,6 @@ bool LDAPConnection::bind(const std::string& username, const std::string& passwo
     );
 
     if (returnCode != LDAP_SUCCESS) {
-        std::cerr << "LDAP bind failed: " << ldap_err2string(returnCode) << std::endl;
         return false;
     }
     m_isAuthenticated = true;

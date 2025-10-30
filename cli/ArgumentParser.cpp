@@ -13,28 +13,39 @@ AttackMethod ArgumentParser::getAttackMethod() const { return attackMethod; }
 std::string ArgumentParser::getFilePath() const { return file_path; }
 
 void ArgumentParser::transformUserDomain() {
-    if (user.username.find("@") != std::string::npos) 
+    if (user.username.find("@") != std::string::npos) {
+        size_t at_pos = user.username.find("@");
+        std::string transform = user.username.substr(at_pos + 1);
+        std::transform(transform.begin(), transform.end(), transform.begin(), ::toupper);
+
+        std::string _username = user.username.substr(0, at_pos);
+        user.username = _username + "@" + transform;
         return;
-        
-    std::transform(DC.begin(), DC.end(), DC.begin(), ::toupper);
-    user.username += "@" + DC;
+    } else if (!DC.empty()) {
+        std::transform(DC.begin(), DC.end(), DC.begin(), ::toupper);
+        user.username += "@" + DC;
+    }
 }
 
 std::string ArgumentParser::makeBaseDN() const {
     size_t pos = DC.find(".");
     std::string toplevel_DC = "", 
                 domainname_DC = "";
+
     if (pos != std::string::npos) {
         toplevel_DC = "DC=" + DC.substr(pos + 1);
         domainname_DC = "DC=" + DC.substr(0, pos);
         
     } else if (( pos = user.username.find(".") ) != std::string::npos) {
         size_t at_pos = user.username.find("@");
+
+        std::string only_domain = user.username.substr(at_pos + 1);
+        size_t dot_after_at = only_domain.find(".");
+
         if (at_pos == std::string::npos)
             return "";
-        toplevel_DC = "DC=" + DC.substr(pos + 1);
-        domainname_DC = "DC=" + DC.substr(at_pos, pos);
-
+        toplevel_DC = "DC=" + only_domain.substr(dot_after_at + 1);
+        domainname_DC = "DC=" + only_domain.substr(0, dot_after_at);
     }
     return "CN=Users," + domainname_DC + "," + toplevel_DC;    
 }
@@ -69,10 +80,12 @@ bool ArgumentParser::parse(int& argc, char* argv[]) {
     for (int i = 1; i < argc; i++) {
         const unsigned int rule = hash(argv[i]);
         switch (rule) {
-            case hash("-u"):
+            case hash("-u"): {
                 if (i + 1 < argc)
                     user.username = argv[++i];
+                transformUserDomain();
                 break;
+            }
             case hash("-p"):
                 if (i + 1 < argc)
                     user.password = argv[++i];
