@@ -193,8 +193,7 @@ std::string KerberosInteraction::requestTGS(const std::string& spn, const std::s
     std::cout << "[*] Requested TGS for " << spn << std::endl;
     
     if (retrieved_creds_ptr && retrieved_creds_ptr->ticket.length > 0) {
-        KerberosInteraction::ASN1Parser asn;
-        std::string hashcat_ticket = asn.formatTicket_TGS(context_.get(), *retrieved_creds_ptr.get());
+        std::string hashcat_ticket = KerberosTicketFormatter::formatTicket_TGS(context_.get(), *retrieved_creds_ptr.get());
         return hashcat_ticket;
     } else {
         std::cerr << "  [Warning] Retrieved credentials structure is empty or has no ticket data." << std::endl;
@@ -203,7 +202,7 @@ std::string KerberosInteraction::requestTGS(const std::string& spn, const std::s
 }
 
 
-std::string KerberosInteraction::ASN1Parser::formatTicket_TGS(krb5_context ctx, const krb5_creds& creds) {
+std::string KerberosTicketFormatter::formatTicket_TGS(krb5_context ctx, const krb5_creds& creds) {
     std::string client_full = principal_to_string(ctx, creds.client);
     std::string server_full = principal_to_string(ctx, creds.server);
 
@@ -330,7 +329,7 @@ std::string KerberosInteraction::ASN1Parser::formatTicket_TGS(krb5_context ctx, 
     return ss_hash.str();
 }
 
-std::string KerberosInteraction::ASN1Parser::principal_to_string(krb5_context context, krb5_principal principal) const {
+std::string KerberosTicketFormatter::principal_to_string(krb5_context context, krb5_principal principal) {
     char* name_buf = nullptr;
     krb5_error_code ret = krb5_unparse_name(context, principal, &name_buf);
 
@@ -344,7 +343,7 @@ std::string KerberosInteraction::ASN1Parser::principal_to_string(krb5_context co
     return name_str;
 }
 
-std::string KerberosInteraction::ASN1Parser::formatTicket_TGT(
+std::string KerberosTicketFormatter::formatTicket_TGT(
     krb5_context ctx, 
     const krb5_creds& creds) {
     
@@ -430,7 +429,7 @@ std::string KerberosInteraction::ASN1Parser::formatTicket_TGT(
     return ss_hash.str();
 }
 
-void KerberosInteraction::ASN1Parser::split_principal(const std::string& full_principal, std::string& name, std::string& realm) const {
+void KerberosTicketFormatter::split_principal(const std::string& full_principal, std::string& name, std::string& realm) {
     size_t at_pos = full_principal.find('@');
     if (at_pos == std::string::npos) {
         name = full_principal;
@@ -441,7 +440,7 @@ void KerberosInteraction::ASN1Parser::split_principal(const std::string& full_pr
     }
 }
 
-std::string KerberosInteraction::ASN1Parser::to_hex(const unsigned char* data, size_t len) const {
+std::string KerberosTicketFormatter::to_hex(const unsigned char* data, size_t len) {
     std::stringstream ss;
     ss << std::hex << std::setfill('0');
     for (size_t i = 0; i < len; ++i) {

@@ -1,6 +1,7 @@
 #include <iostream>
 #include "ArgumentParser.h"
 #include "../attacks/Attacks.h"
+#include <algorithm>
 
 ArgumentParser::ArgumentParser() {}
 
@@ -10,6 +11,33 @@ std::string ArgumentParser::getDC() const { return DC; }
 std::string ArgumentParser::getIP() const { return ip; }
 AttackMethod ArgumentParser::getAttackMethod() const { return attackMethod; }
 std::string ArgumentParser::getFilePath() const { return file_path; }
+
+void ArgumentParser::transformUserDomain() {
+    if (user.username.find("@") != std::string::npos) 
+        return;
+        
+    std::transform(DC.begin(), DC.end(), DC.begin(), ::toupper);
+    user.username += "@" + DC;
+}
+
+std::string ArgumentParser::makeBaseDN() const {
+    size_t pos = DC.find(".");
+    std::string toplevel_DC = "", 
+                domainname_DC = "";
+    if (pos != std::string::npos) {
+        toplevel_DC = "DC=" + DC.substr(pos + 1);
+        domainname_DC = "DC=" + DC.substr(0, pos);
+        
+    } else if (( pos = user.username.find(".") ) != std::string::npos) {
+        size_t at_pos = user.username.find("@");
+        if (at_pos == std::string::npos)
+            return "";
+        toplevel_DC = "DC=" + DC.substr(pos + 1);
+        domainname_DC = "DC=" + DC.substr(at_pos, pos);
+
+    }
+    return "CN=Users," + domainname_DC + "," + toplevel_DC;    
+}
 
 void ArgumentParser::printHelp() {
     std::cerr << "Yharnam LDAP Enumerator" << std::endl;
@@ -49,10 +77,12 @@ bool ArgumentParser::parse(int& argc, char* argv[]) {
                 if (i + 1 < argc)
                     user.password = argv[++i];
                 break;
-            case hash("-dc"):
+            case hash("-dc"): {
                 if (i + 1 < argc) 
                     DC = argv[++i];
+                    transformUserDomain();
                 break;
+            }
             case hash("-h"):
                 printHelp();
                 return false;

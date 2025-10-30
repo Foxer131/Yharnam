@@ -15,6 +15,7 @@ class ArgumentParser {
     std::string file_path;
     AttackMethod attackMethod = NONE;
 
+    void transformUserDomain();
 public:
     ArgumentParser();
 
@@ -24,6 +25,9 @@ public:
     std::string getIP() const;
     std::string getFilePath() const;
     AttackMethod getAttackMethod() const;
-    void printHelp();
+
+
+    std::string makeBaseDN() const;
     bool parse(int& argc, char* argv[]);
+    void printHelp();
 };

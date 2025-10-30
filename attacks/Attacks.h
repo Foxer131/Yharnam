@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include "../connections/LDAPConnection.h"
+#include "../connections/KerberosInteraction.h"
 
 enum AttackMethod {
     KERBEROAST,
@@ -15,8 +16,9 @@ enum AttackMethod {
 namespace Attacks {
     class Kerberoast {
         LDAPConnection& conn;
+        KerberosInteraction krb5;
     public:
-        Kerberoast(LDAPConnection& _conn);
+        Kerberoast(LDAPConnection& _conn, const std::string& username, const std::string& password);
         std::vector<std::string> listUser(const std::string& baseDN);
         std::string requestTicket(const std::vector<std::string>& spns);
         std::pair<std::string, std::string> requestTicket(const std::string& spn, const std::string& username, bool to_file);

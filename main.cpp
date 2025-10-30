@@ -7,11 +7,8 @@
 #include "attacks/Attacks.h"
 #include "connections/KerberosInteraction.h"
 #include "utils/Utils.h"
+#include "utils/Colors.h"
 
-const char* const COLOR_RED   = "\033[91m";
-const char* const COLOR_GREEN = "\033[92m";
-const char* const COLOR_BLUE = "\033[94m";
-const char* const COLOR_RESET = "\033[0m";
 
 int main(int argc, char* argv[]) {
     //int debug_level = -1;
@@ -27,7 +24,7 @@ int main(int argc, char* argv[]) {
     std::string username = _u.username;
     std::string password = _u.password;
 
-    const std::string baseDN = "CN=Users,DC=yharnam,DC=local";
+    const std::string baseDN = parser.makeBaseDN();
 
     std::cout << "--- Yharnam LDAP Enumerator ---" << std::endl;
     LDAPConnection connection;
@@ -35,19 +32,18 @@ int main(int argc, char* argv[]) {
     if (!connection.connect(target_ip))
         return 1;
 
-    std::cout << COLOR_BLUE << "[+] Connection established \t\t\t" << parser.getIP() << COLOR_RESET << std::endl;
+    std::cout << Colors::COLOR_BLUE << "[+] Connection established \t\t\t" << parser.getIP() << Colors::COLOR_RESET << std::endl;
     if (connection.bind(username, password)) {
-        std::cout << COLOR_GREEN << "[*] Authenticated successfully \t\t\t" << username << ":" << password << COLOR_RESET << std::endl;
+        std::cout << Colors::COLOR_GREEN << "[*] Authenticated successfully \t\t\t" << username << ":" << password << Colors::COLOR_RESET << std::endl;
+        
         if (parser.getAttackMethod() == AttackMethod::NONE) {
-            KerberosInteraction krb5;
-            krb5.requestTGT(username, password);
+
         } else {
             AttackMethod _att = parser.getAttackMethod();
             switch (_att) {
                 case AttackMethod::KERBEROAST: {
-                    Attacks::Kerberoast krbroast(connection);
-                    KerberosInteraction krb5;
-                    krb5.requestTGT(username, password);
+                    Attacks::Kerberoast krbroast(connection, username, password);
+
                     std::vector<std::string> spns = krbroast.listUser(baseDN);
                     std::vector<std::pair<std::string, std::string>> to_save;
                     for (std::string target : spns) {
@@ -68,10 +64,10 @@ int main(int argc, char* argv[]) {
                     break;
             }
                 
-            std::cout << COLOR_BLUE << "\nFinishing attack" << COLOR_RESET;
+            std::cout << Colors::COLOR_BLUE << "\nFinishing attack" << Colors::COLOR_RESET;
         }
     } else {
-        std::cout << COLOR_RED << "[-] Authentication failed \t" << username << ":" << password << COLOR_RESET << std::endl;
+        std::cout << Colors::COLOR_RED << "[-] Authentication failed \t" << username << ":" << password << Colors::COLOR_RESET << std::endl;
     }
     std::cout << "\nEyes...";
     return 0;
