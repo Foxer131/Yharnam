@@ -1,16 +1,11 @@
 #include <iostream>
 #include "ArgumentParser.h"
-#include "../attacks/Attacks.h"
 #include <algorithm>
+#include <sstream>
 
 ArgumentParser::ArgumentParser() {}
 
 
-User ArgumentParser::getUser() const { return user; }
-std::string ArgumentParser::getDC() const { return DC; }
-std::string ArgumentParser::getIP() const { return ip; }
-AttackMethod ArgumentParser::getAttackMethod() const { return attackMethod; }
-std::string ArgumentParser::getFilePath() const { return file_path; }
 
 void ArgumentParser::transformUserDomain() {
     if (user.username.find("@") != std::string::npos) {
@@ -47,19 +42,48 @@ std::string ArgumentParser::makeBaseDN() const {
         toplevel_DC = "DC=" + only_domain.substr(dot_after_at + 1);
         domainname_DC = "DC=" + only_domain.substr(0, dot_after_at);
     }
-    return "CN=Users," + domainname_DC + "," + toplevel_DC;    
+    return domainname_DC + "," + toplevel_DC;    
 }
 
 void ArgumentParser::printHelp() {
-    std::cerr << "Yharnam LDAP Enumerator" << std::endl;
-    std::cerr << "Usage: Yharnam <target_ip> -u <username> -p <password> -dc <domain_controller>" << std::endl;
-    std::cerr << "\nRequired Arguments:" << std::endl;
-    std::cerr << "  <target_ip>        IP address of the target LDAP server." << std::endl;
-    std::cerr << "  -u, --username     Username for authentication (e.g., 'domain\\user')." << std::endl;
-    std::cerr << "  -p, --password     Password for authentication." << std::endl;
-    std::cerr << "  -dc, --domain      The domain controller path (eg: yharnam.local)." << std::endl;
-    std::cerr << "  -outputfile        Output file containing hashes captured" << std::endl;
-}   
+    std::cerr << R"(
+Yharnam LDAP Enumerator & Attack Vector Tool
+Usage: Yharnam <target_ip> -u <username> -p <password> -dc <domain_controller> [OPTIONS]
+
+Target & Authentication:
+  <target_ip>            IP address of the target LDAP server (DC).
+  -u, --username         Username for authentication (e.g., 'user' or 'user@domain.local').
+  -p, --password         Password for authentication.
+  -dc, --domain          The FQDN of the Domain Controller (e.g., yharnam.local).
+                         Required for Kerberos ticket requests.
+
+Attack Modules:
+  --kerberoast           Perform Kerberoasting attack against SPN accounts.
+                         Extracts TGS tickets for offline cracking.
+  --asreproast           Perform AS-REP Roasting attack against users with
+                         'Do not require Kerberos preauthentication' enabled.
+  --find-acls [TARGETS]  Scan for dangerous ACLs (GenericWrite, WriteOwner, etc).
+                         Optional: Provide comma-separated list of users/groups.
+                         Default: Scans Admin groups (Domain Admins, etc).
+                         Example: --find-acls "sql_svc,backup_adm"
+  --find-acls all        Scan ACLs for ALL users in the domain (Noisy!).
+
+Analysis & Forensics:
+  --whoami               Enumerate current user privileges, groups and metadata.
+  --query "<filter>"     Execute a custom LDAP query.
+                         Example: --query "(objectClass=computer)\"
+  --attrs "<list>"       Specify attributes to fetch for custom query (comma separated).
+                         Default: Fetch all attributes.
+
+Output:
+  -outputfile <path>     Save attack artifacts (hashes) to a file.
+
+Examples:
+  ./Yharnam 10.10.10.5 -u "isabel.l" -p "Pass123" -dc yharnam.local --kerberoast -outputfile hashes.txt
+  ./Yharnam 10.10.10.5 -u "isabel.l" -p "Pass123" -dc yharnam.local --find-acls
+  ./Yharnam 10.10.10.5 -u "isabel.l" -p "Pass123" -dc yharnam.local --whoami
+)" << std::endl;
+}
 
 constexpr unsigned int hash(std::string_view str) {
     unsigned int hash = 0;
@@ -96,14 +120,56 @@ bool ArgumentParser::parse(int& argc, char* argv[]) {
                     transformUserDomain();
                 break;
             }
+            case hash("--query"):
+            case hash("-q") : {
+                if (i + 1 < argc)
+                    query = argv[++i];
+                currentModule = QUERY;
+                break;
+            }
+            case hash("--attrs"):
+                if (i + 1 < argc) {
+                    std::string rawAttrs = argv[++i];
+                    std::stringstream ss(rawAttrs);
+                    std::string segment;
+                    // Split por vírgula
+                    while(std::getline(ss, segment, ',')) {
+                        customAttributes.push_back(segment);
+                    }
+                }
+                break;
+            case hash("--whoami"):
+                currentModule = WHOAMI;
+                break;
+            case hash("--find-acls"): {
+                currentModule = FINDACLS;
+                if (i + 1< argc && std::string(argv[i+1]).rfind("-", 0) != 0) {
+                    std::string alvo = argv[++i];
+                    if (alvo == "all")
+                        scanAll = true;
+                    else {
+                        std::stringstream ss(alvo);
+                        std::string segment;
+                        while(std::getline(ss, segment, ',')) {
+                            segment.erase(0, segment.find_first_not_of(' '));
+                            segment.erase(segment.find_last_not_of(' ') + 1);
+                            if(!segment.empty()) 
+                                customTargets.push_back(segment);
+                    }
+                    }
+                } else {
+                    scanAll = true;
+                }
+                break;
+            }
             case hash("-h"):
                 printHelp();
                 return false;
             case hash("--kerberoast"):
-                attackMethod = KERBEROAST;
+                currentModule = KERBEROAST;
                 break;
             case hash("--asreproast"):
-                attackMethod = ASREPROAST;
+                currentModule = ASREPROAST;
                 break;
             case hash("-outputfile"):
                 if (i + 1 < argc)

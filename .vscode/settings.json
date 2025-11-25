@@ -57,6 +57,10 @@
         "cstring": "cpp",
         "iomanip": "cpp",
         "sstream": "cpp",
-        "fstream": "cpp"
-    }
+        "fstream": "cpp",
+        "set": "cpp",
+        "bitset": "cpp",
+        "complex": "cpp"
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

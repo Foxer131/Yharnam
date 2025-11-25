@@ -79,42 +79,78 @@ bool LDAPConnection::bind(const std::string& username, const std::string& passwo
 bool LDAPConnection::isAuthenticated() const { return m_isAuthenticated; }
 bool LDAPConnection::isConnected() const { return m_isConnected; }
 
-std::vector<std::map<std::string, std::vector<std::string>>> LDAPConnection::executeQuery(const std::string& baseDN, const std::string& query, const std::vector<std::string>& attributes) {
+LDAPResult LDAPConnection::executeBaseQuery(const std::string& baseDN, const std::string& query, const std::vector<std::string>& attributes) {
+    return performSearch(baseDN, LDAP_SCOPE_BASE, query, attributes);
+}
+
+LDAPResult LDAPConnection::executeQuery(const std::string& baseDN, const std::string& query, const std::vector<std::string>& attributes) {
+    return performSearch(baseDN, LDAP_SCOPE_SUBTREE, query, attributes);
+}
+
+LDAPResult LDAPConnection::performSearch(const std::string& baseDN, int scope, const std::string& query, const std::vector<std::string>& attributes) {
     std::vector<std::map<std::string, std::vector<std::string>>> results;
     
-    if (!m_isConnected || !m_isAuthenticated)
-        return results;
+    if (!m_isConnected || !m_isAuthenticated) return results;
 
     LDAPMessage* res = nullptr;
     std::vector<char*> attr;
+    bool askingForSD = false;
+
     for (const auto& attribute : attributes) {
         attr.push_back(const_cast<char*>(attribute.c_str()));
+        if (attribute == "nTSecurityDescriptor") askingForSD = true;
     }
     attr.push_back(NULL);
 
     int chase_referrals = 0;
     ldap_set_option(m_ldapSession, LDAP_OPT_REFERRALS, &chase_referrals);
 
-    int returnCode = ldap_search_ext_s(m_ldapSession, baseDN.c_str(), LDAP_SCOPE_SUBTREE, query.c_str(), attr.data(), 0, NULL, NULL, NULL, 0, &res);
+    // Controle para Security Descriptor (DACL)
+    LDAPControl* server_ctrls[2] = {nullptr, nullptr};
+    LDAPControl sd_control;
+    char ber_val[] = { 0x30, 0x03, 0x02, 0x01, 0x07 }; // Sequência BER correta
+    struct berval bval;
+    bval.bv_val = ber_val;
+    bval.bv_len = 5;
+
+    if (askingForSD) {
+        sd_control.ldctl_oid = (char*)"1.2.840.113556.1.4.801";
+        sd_control.ldctl_iscritical = 1;
+        sd_control.ldctl_value = bval;
+        server_ctrls[0] = &sd_control;
+    }
+
+    // Chama a API do LDAP com o escopo dinâmico
+    int returnCode = ldap_search_ext_s(
+        m_ldapSession, 
+        baseDN.c_str(), 
+        scope,  // <--- AQUI ESTÁ A CORREÇÃO (BASE ou SUBTREE)
+        query.c_str(), 
+        attr.data(), 
+        0, 
+        server_ctrls, 
+        NULL, NULL, 0, &res
+    );
 
     if (res != NULL) {
         for (LDAPMessage* entry = ldap_first_entry(m_ldapSession, res); entry != NULL; entry = ldap_next_entry(m_ldapSession, entry)) {
-            
             std::map<std::string, std::vector<std::string>> currentObject;
             BerElement* ber = nullptr;
+            
             for (char* attribute_name = ldap_first_attribute(m_ldapSession, entry, &ber);
-                attribute_name != NULL;
-                attribute_name = ldap_next_attribute(m_ldapSession, entry, ber)) {
+                 attribute_name != NULL;
+                 attribute_name = ldap_next_attribute(m_ldapSession, entry, ber)) {
                 
                 std::vector<std::string> currentAttr_values;
                 berval** values = ldap_get_values_len(m_ldapSession, entry, attribute_name);
+                
                 if (values != NULL) {
                     for (int i = 0; values[i] != NULL; i++) {
                         const char* value_data = values[i]->bv_val;
                         size_t value_len = values[i]->bv_len;
 
                         if (is_printable(value_data, value_len)) {
-                            currentAttr_values.push_back(value_data);
+                            currentAttr_values.emplace_back(value_data, value_len);
                         } else {
                             currentAttr_values.push_back("::" + base64_encode(value_data, value_len));
                         }
@@ -124,24 +160,21 @@ std::vector<std::map<std::string, std::vector<std::string>>> LDAPConnection::exe
                 currentObject[attribute_name] = currentAttr_values;
                 ldap_memfree(attribute_name);
             }
-            if (ber != NULL) {
-                ber_free(ber, 0);
-            }
-
+            if (ber != NULL) ber_free(ber, 0);
             results.push_back(currentObject);
         }
     }
 
     if (returnCode != LDAP_SUCCESS && results.empty()) {
-        std::cerr << "LDAP Search Error: " << ldap_err2string(returnCode) << std::endl;
+        // Debug opcional para erros que não sejam "No such object"
+        if (returnCode != LDAP_NO_SUCH_OBJECT)
+             std::cerr << "LDAP Search Error: " << ldap_err2string(returnCode) << std::endl;
     }
 
-    if (res) {
-        ldap_msgfree(res);
-    }
+    if (res) ldap_msgfree(res);
+    
     return results;
 }
-
 
 bool is_printable(const char* data, size_t len) {
     for (size_t i = 0; i < len; ++i) {

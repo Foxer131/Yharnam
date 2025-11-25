@@ -35,9 +35,11 @@ struct Krb5CloseCcache {
 };
 
 class KerberosTicketFormatter {
+
     static std::string principal_to_string(krb5_context context, krb5_principal principal);
     static void split_principal(const std::string& full_principal, std::string& name, std::string& realm);
     static std::string to_hex(const unsigned char* data, size_t len);
+
 public:
     static std::string formatTicket_TGS(krb5_context ctx, const krb5_creds& creds);
     static std::string formatTicket_TGT(krb5_context ctx, const krb5_creds& creds);
