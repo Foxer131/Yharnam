@@ -2,14 +2,14 @@
 #include <string>
 #include "../cli/ArgumentParser.h" 
 
-class LDAPConnection;    
+class LdapConnection;    
 class KerberosInteraction;
-class I_LdapQuerier;
+class LdapQuerier;
 class AclService;
 
 struct ModuleFactoryContext {
-    const Module moduleToRun;
-    LDAPConnection& ldapService;
+    const Modules moduleToRun;
+    LdapConnection& ldapService;
     KerberosInteraction& krbService;
     AclService& aclService;
     const User& user;
@@ -18,8 +18,8 @@ struct ModuleFactoryContext {
     std::vector<std::string> customTargets;
     bool scanAll;
 
-    ModuleFactoryContext(Module mod, 
-        LDAPConnection& l, 
+    ModuleFactoryContext(Modules mod, 
+        LdapConnection& l, 
         KerberosInteraction& k, 
         AclService& a, 
         const User& u, 
@@ -32,10 +32,10 @@ struct ModuleFactoryContext {
 };
 
 struct ModuleRuntimeContext {
-    I_LdapQuerier& ldap;
+    LdapQuerier& ldap;
     const std::string& baseDN;
     const std::string& outputFilePath;
 
-    ModuleRuntimeContext(I_LdapQuerier& l, const std::string& dn, const std::string& path)
+    ModuleRuntimeContext(LdapQuerier& l, const std::string& dn, const std::string& path)
         : ldap(l), baseDN(dn), outputFilePath(path) {}
 };

@@ -1,14 +1,14 @@
 #pragma once
-#include "../../core/I_Module.h"
-#include "../../protocols/LDAPConnection.h"
+#include "../../core/Module.h"
+#include "../../protocols/LdapConnection.h"
 #include "../../cli/ArgumentParser.h"
 #include "../../protocols/KerberosInteraction.h"
 #include "../../core/Context.h"
 
 namespace Attacks {
-    class Kerberoast : public I_Module {
+    class Kerberoast : public Module {
         private:
-            I_LdapQuerier& ldap;
+            LdapQuerier& ldap;
             KerberosInteraction& krb;
             std::string username;
             std::string password;
@@ -17,7 +17,7 @@ namespace Attacks {
             std::pair<std::string, std::string> requestTicket(const std::string& spn);
     
         public:
-            Kerberoast(I_LdapQuerier& _ldap, 
+            Kerberoast(LdapQuerier& _ldap, 
                         KerberosInteraction& _krb, 
                         const std::string& user, 
                         const std::string& pass
@@ -26,12 +26,12 @@ namespace Attacks {
             void run(const ModuleRuntimeContext& ctx) override;
         };
 
-    class ASREPRoast : public I_Module{
-        I_LdapQuerier& ldap;
+    class ASREPRoast : public Module{
+        LdapQuerier& ldap;
 
         std::string extractDomainFromDN(const std::string& baseDN);
         public:
-        ASREPRoast(I_LdapQuerier& ldap);
+        ASREPRoast(LdapQuerier& ldap);
         std::vector<std::string> listUser(const std::string& baseDN);
         bool requestTicket(const std::string& vuln_user, const std::string& domain);
 

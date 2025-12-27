@@ -32,13 +32,14 @@ extern "C" {
 #define PERM_DS_WRITE_PROP      0x00000020
 #define PERM_DS_CONTROL_ACCESS  0x00000100
 
-Analysis::FindAcls::FindAcls(I_LdapQuerier& ldap_, 
+Analysis::FindAcls::FindAcls(LdapQuerier& ldap_, 
                             AclService& acl_, 
                             const std::string& username_,
                             const std::vector<std::string>& customTargets_,
                             bool scanAll_    
                         ) 
-    : ldap(ldap_), 
+    : 
+    ldap(ldap_), 
     acl(acl_), 
     myUsername(username_), 
     scanAll(scanAll_) {
@@ -70,7 +71,7 @@ std::vector<std::string> Analysis::FindAcls::enumerateAllUsers(const std::string
     std::cout << "    [*] Enumerating all users (may take a while)" << std::endl;
     std::string query = "(&(objectClass=user)(objectCategory=person)(!(objectClass=computer))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))";
     std::vector<std::string> attrs = {"sAMAccountName"};
-    auto results = ldap.executeQuery(baseDN, query, attrs);
+    auto results = ldap.executeQueryAndUnpackData(baseDN, query, attrs);
 
     std::vector<std::string> users;
     for (const auto& entry : results) {
@@ -88,7 +89,7 @@ void Analysis::FindAcls::populateMySids(const std::string& baseDN) {
     
     std::string query = "(sAMAccountName=" + shortUser + ")";
     std::vector<std::string> attrs = {"distinguishedName"};
-    auto resDN = ldap.executeQuery(baseDN, query, attrs);
+    auto resDN = ldap.executeQueryAndUnpackData(baseDN, query, attrs);
     
     if(resDN.empty()) {
         std::cerr << Colors::COLOR_RED << "[-] Error: Could not find user " << shortUser << ". Filtering disabled." << Colors::COLOR_RESET << std::endl;
@@ -97,7 +98,7 @@ void Analysis::FindAcls::populateMySids(const std::string& baseDN) {
     
     std::string userDN = resDN[0].at("distinguishedName").front();
     
-    auto resGroups = ldap.executeBaseQuery(userDN, "(objectClass=*)", {"objectSid", "tokenGroups"});
+    auto resGroups = ldap.executeBaseScopeQueryAndUnpackData(userDN, "(objectClass=*)", {"objectSid", "tokenGroups"});
     if(resGroups.empty()) {
         std::cerr << Colors::COLOR_RED << "[-] Error: Could not retrieve tokenGroups for " << shortUser << Colors::COLOR_RESET << std::endl;
         return;
@@ -132,14 +133,14 @@ void Analysis::FindAcls::run(const ModuleRuntimeContext& ctx) {
     std::cout << "    [*] Scanning for ACLs on " << targets.size() << " targets" << std::endl;
     
     for (const auto& target : targets) 
-        checkTarget(target, ctx.baseDN);
+        checkTargetForPermissions(target, ctx.baseDN);
 }
 
-void Analysis::FindAcls::checkTarget(const std::string& target, const std::string& baseDN) {
+void Analysis::FindAcls::checkTargetForPermissions(const std::string& target, const std::string& baseDN) {
     std::string query = "(sAMAccountName=" + target + ")";
     std::vector<std::string> attrs = {"nTSecurityDescriptor"};
     
-    auto results = ldap.executeQuery(baseDN, query, attrs);
+    auto results = ldap.executeQueryAndUnpackData(baseDN, query, attrs);
     if (results.empty()) {
         // std::cout << "DEBUG: Target " << target << " not found in LDAP." << std::endl;
         return;
@@ -165,9 +166,10 @@ void Analysis::FindAcls::checkTarget(const std::string& target, const std::strin
     for (const auto& ace : aces) {
         if (ace.trusteeSid == "S-1-5-18" || ace.trusteeSid == "S-1-5-10" || ace.trusteeSid == "S-1-3-0") continue;
         
-        if (ace.humanReadablePermissions.find("ExtendedRight") != std::string::npos) {
-            if (ace.trusteeSid == "S-1-1-0" || ace.trusteeSid == "S-1-5-11") continue;
-        }
+        if (ace.humanReadablePermissions.find("ExtendedRight") != std::string::npos) 
+            if (ace.trusteeSid == "S-1-1-0" || ace.trusteeSid == "S-1-5-11") 
+                continue;
+
         if (mySids.empty() || mySids.count(ace.trusteeSid)) {
             if (!headerPrinted) {
                 std::cout << "[*] Target: " << Colors::COLOR_BLUE << target << Colors::COLOR_RESET << "\n";

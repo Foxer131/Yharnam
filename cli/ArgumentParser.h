@@ -8,7 +8,7 @@ typedef struct {
     std::string username;
 } User;
 
-enum Module {
+enum Modules {
     KERBEROAST,
     ASREPROAST,
     GOLDEN_TICKET,
@@ -25,7 +25,7 @@ class ArgumentParser {
     std::string DC;
     std::string ip;
     std::string file_path;
-    Module currentModule = NONE;
+    Modules currentModule = NONE;
     // Analysis::Query
     std::string query;
     std::vector<std::string> customAttributes;
@@ -41,7 +41,7 @@ public:
     User  getUser() const { return user; }
     std::string getDC() const { return DC; }
     std::string getIP() const { return ip; }
-    Module getModuleToRun() const { return currentModule; }
+    Modules getModuleToRun() const { return currentModule; }
     std::string getFilePath() const { return file_path; }
 
     std::string getQuery() const { return query; }

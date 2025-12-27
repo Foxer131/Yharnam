@@ -4,7 +4,7 @@
 #include <sstream>
 #include "../../utils/Colors.h"
 
-Attacks::ASREPRoast::ASREPRoast(I_LdapQuerier& ldap_) : ldap(ldap_) {}
+Attacks::ASREPRoast::ASREPRoast(LdapQuerier& ldap_) : ldap(ldap_) {}
 
 std::string Attacks::ASREPRoast::extractDomainFromDN(const std::string& baseDN) {
     std::string domain;
@@ -46,7 +46,7 @@ std::vector<std::string>  Attacks::ASREPRoast::listUser(const std::string& baseD
     std::string query = "(&(samAccountType=805306368)(userAccountControl:1.2.840.113556.1.4.803:=4194304))";
     std::vector<std::string> attrs = {"sAMAccountName"};
 
-    auto results = ldap.executeQuery(baseDN, query, attrs);
+    auto results = ldap.executeQueryAndUnpackData(baseDN, query, attrs);
 
     for (const auto& userObject : results) {
         auto user = userObject.find("sAMAccountName");

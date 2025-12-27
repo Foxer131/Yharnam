@@ -1,10 +1,10 @@
 #include "Analysis.h"
 #include "../../utils/Colors.h"
-#include "../../protocols/I_LdapQuerier.h"
+#include "../../protocols/LdapQuerier.h"
 #include <iostream>
 #include <iomanip>
 
-Analysis::Query::Query(I_LdapQuerier& _ldap, 
+Analysis::Query::Query(LdapQuerier& _ldap, 
     const std::string& _query, 
     const std::vector<std::string>& _attrs)
 : ldap(_ldap), queryFilter(_query), attributesToFetch(_attrs) {}
@@ -24,7 +24,7 @@ void Analysis::Query::run(const ModuleRuntimeContext& ctx) {
         std::cout << "[*] Fetching ALL attributes (*)" << std::endl;
     }
 
-    auto results = ldap.executeQuery(ctx.baseDN, queryFilter, attributesToFetch);
+    auto results = ldap.executeQueryAndUnpackData(ctx.baseDN, queryFilter, attributesToFetch);
     displayResults(results);
 }
 

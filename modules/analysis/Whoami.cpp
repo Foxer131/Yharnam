@@ -9,22 +9,32 @@
 static std::string filetimeToString(const std::string& filetimeStr) {
     try {
         unsigned long long filetime = std::stoull(filetimeStr);
-        if (filetime == 0 || filetime == 9223372036854775807) return "Never";
+
+        if (filetime == 0 || filetime == 9223372036854775807) 
+            return "Never";
         time_t unixTime = (filetime / 10000000ULL) - 11644473600ULL;
         
         char buffer[80];
         struct tm* timeinfo = localtime(&unixTime);
         strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
+        
         return std::string(buffer);
-    } catch (...) { return "Invalid Date"; }
+    } catch (...) { 
+        return "Invalid Date"; 
+    }
 }
 
 static std::string extractCN(const std::string& dn) {
     size_t start = dn.find("CN=");
-    if (start == std::string::npos) return dn;
+    if (start == std::string::npos) 
+        return dn;
+
     start += 3;
     size_t end = dn.find(',', start);
-    if (end == std::string::npos) return dn.substr(start);
+
+    if (end == std::string::npos) 
+        return dn.substr(start);
+
     return dn.substr(start, end - start);
 }
 
@@ -42,17 +52,18 @@ static std::string decodeUAC(const std::string& uacStr) {
     } catch (...) { return uacStr; }
 }
 
-Analysis::Whoami::Whoami(I_LdapQuerier& ldap_, const std::string& username_) 
-    : ldap(ldap_), username(username_) {}
+Analysis::Whoami::Whoami(LdapQuerier& ldap_, const std::string& username_) 
+    : ldap(ldap_), 
+    username(username_) 
+    {}
 
 void Analysis::Whoami::run(const ModuleRuntimeContext& ctx) {
     std::cout << "[*] Querying LDAP for current user metadata..." << std::endl;
 
     std::string shortUsername = username;
     size_t pos = shortUsername.find("@");
-    if (pos != std::string::npos) {
+    if (pos != std::string::npos)
         shortUsername = shortUsername.substr(0, pos);
-    }
 
     std::string query = "(sAMAccountName=" + shortUsername + ")";
     std::vector<std::string> attributes = {
@@ -67,7 +78,7 @@ void Analysis::Whoami::run(const ModuleRuntimeContext& ctx) {
         "objectSid"
     };
 
-    auto results = ldap.executeQuery(ctx.baseDN, query, attributes);
+    auto results = ldap.executeQueryAndUnpackData(ctx.baseDN, query, attributes);
 
     if (results.empty()) {
         std::cerr << Colors::COLOR_RED << "[-] Error: Could not find user object '" 
@@ -76,17 +87,19 @@ void Analysis::Whoami::run(const ModuleRuntimeContext& ctx) {
         return;
     }
     
-    const auto& me = results[0];
+    const auto& whoami_data = results[0];
 
     
-    std::cout << "\n" << Colors::COLOR_GREEN << "=== WHOAMI: " << shortUsername << " ===" << Colors::COLOR_RESET << "\n";
+    std::cout << "\n" << Colors::COLOR_GREEN << "[*] Whoami: " << shortUsername << Colors::COLOR_RESET << "\n";
 
     auto printAttr = [&](const char* label, const std::string& key, bool isDate = false, bool isUAC = false) {
-        if (me.count(key) && !me.at(key).empty()) {
-            std::string val = me.at(key).front();
+        if (whoami_data.count(key) && !whoami_data.at(key).empty()) {
+            std::string val = whoami_data.at(key).front();
             
-            if (isDate) val = filetimeToString(val);
-            if (isUAC)  val = decodeUAC(val) + " (" + val + ")";
+            if (isDate) 
+                val = filetimeToString(val);
+            if (isUAC)  
+                val = decodeUAC(val) + " (" + val + ")";
             
             std::cout << std::left << std::setw(20) << label << ": " << val << "\n";
         }
@@ -99,8 +112,8 @@ void Analysis::Whoami::run(const ModuleRuntimeContext& ctx) {
     printAttr("Password Last Set",  "pwdLastSet", true);
     printAttr("Last Logon",         "lastLogon", true);
 
-    if (me.count("adminCount")) {
-        std::string val = me.at("adminCount").front();
+    if (whoami_data.count("adminCount")) {
+        std::string val = whoami_data.at("adminCount").front();
         if (val == "1") {
             std::cout << std::left << std::setw(20) << "Privileges" << ": " 
                       << Colors::COLOR_RED << "HIGH VALUE TARGET (AdminCount=1)" << Colors::COLOR_RESET << "\n";
@@ -109,22 +122,28 @@ void Analysis::Whoami::run(const ModuleRuntimeContext& ctx) {
 
     std::cout << "\n" << Colors::COLOR_YELLOW << "--- Group Membership ---" << Colors::COLOR_RESET << "\n";
 
-    if (me.count("primaryGroupID")) {
-        std::string pgid = me.at("primaryGroupID").front();
+    if (whoami_data.count("primaryGroupID")) {
+        std::string pgid = whoami_data.at("primaryGroupID").front();
         std::string groupName;
         
-        if (pgid == "513") groupName = "Domain Users";
-        else if (pgid == "512") groupName = "Domain Admins";
-        else if (pgid == "514") groupName = "Domain Guests";
-        else if (pgid == "515") groupName = "Domain Computers";
-        else if (pgid == "516") groupName = "Domain Controllers";
-        else groupName = "RID-" + pgid;
+        if (pgid == "513") 
+            groupName = "Domain Users";
+        else if (pgid == "512") 
+            groupName = "Domain Admins";
+        else if (pgid == "514") 
+            groupName = "Domain Guests";
+        else if (pgid == "515") 
+            groupName = "Domain Computers";
+        else if (pgid == "516") 
+            groupName = "Domain Controllers";
+        else 
+            groupName = "RID-" + pgid;
 
         std::cout << "  * " << groupName << " (Primary Group)\n";
     }
 
-    if (me.count("memberOf")) {
-        for (const auto& groupDN : me.at("memberOf")) {
+    if (whoami_data.count("memberOf")) {
+        for (const auto& groupDN : whoami_data.at("memberOf")) {
             std::cout << "  - " << extractCN(groupDN) << "\n";
         }
     }

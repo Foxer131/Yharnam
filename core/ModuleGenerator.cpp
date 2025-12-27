@@ -5,31 +5,31 @@
 #include <memory>
 
 
-std::unique_ptr<I_Module> ModuleFactory::createModule(const ModuleFactoryContext& ctx) {
+std::unique_ptr<Module> ModuleFactory::createModule(const ModuleFactoryContext& ctx) {
     switch( ctx.moduleToRun) {
-        case Module::KERBEROAST:
+        case Modules::KERBEROAST:
             return std::make_unique<Attacks::Kerberoast>(
                 ctx.ldapService,
                 ctx.krbService,
                 ctx.user.username,
                 ctx.user.password
             );
-        case Module::ASREPROAST:
+        case Modules::ASREPROAST:
             return std::make_unique<Attacks::ASREPRoast>(
                 ctx.ldapService
             );
-        case Module::QUERY:
+        case Modules::QUERY:
             return std::make_unique<Analysis::Query>(
                 ctx.ldapService,
                 ctx.query,
                 ctx.attrs
             );
-        case Module::WHOAMI:
+        case Modules::WHOAMI:
             return std::make_unique<Analysis::Whoami>(
                 ctx.ldapService,
                 ctx.user.username
             );
-        case Module::FINDACLS:
+        case Modules::FINDACLS:
             return std::make_unique<Analysis::FindAcls>(
                 ctx.ldapService,
                 ctx.aclService,
@@ -37,7 +37,7 @@ std::unique_ptr<I_Module> ModuleFactory::createModule(const ModuleFactoryContext
                 ctx.customTargets,
                 ctx.scanAll
             );
-        case Module::NONE:
+        case Modules::NONE:
         default:
             return nullptr;
     }

@@ -2,7 +2,7 @@
 #include <vector>
 #include <string>
 #include <ldap.h>
-#include "protocols/LDAPConnection.h"
+#include "protocols/LdapConnection.h"
 #include "protocols/KerberosInteraction.h"
 #include "protocols/AclService.h"
 #include "cli/ArgumentParser.h"
@@ -10,7 +10,7 @@
 #include "utils/Utils.h"
 #include "utils/Colors.h"
 #include "core/ModuleGenerator.h"
-#include "core/I_Module.h"
+#include "core/Module.h"
 #include "core/ModuleGenerator.h"
 #include "core/Context.h"
 
@@ -22,17 +22,17 @@ int main(int argc, char* argv[]) {
 
     try {
         
-        LDAPConnection ldap; 
+        LdapConnection ldap_connection; 
         std::string targetIP = parser.getIP();
 
-        if (!ldap.connect(targetIP)) {
+        if (!ldap_connection.connect(targetIP)) {
             std::cerr << Colors::COLOR_RED << "[-] Failed to connect to LDAP at " << targetIP << Colors::COLOR_RESET << std::endl;
             return 1;
         }
         std::cout << Colors::COLOR_BLUE << "[+] Connection established \t\t" << targetIP << Colors::COLOR_RESET << std::endl;
 
         User user = parser.getUser();
-        if (!ldap.bind(user.username, user.password)) {
+        if (!ldap_connection.bind(user.username, user.password)) {
             std::cerr << Colors::COLOR_RED << "[-] Authentication failed for " << user.username << Colors::COLOR_RESET << std::endl;
             return 1;
         }
@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
 
         ModuleFactoryContext factoryCtx(
             parser.getModuleToRun(),
-            ldap,
+            ldap_connection,
             krbService,
             acl,
             user,
@@ -53,20 +53,20 @@ int main(int argc, char* argv[]) {
             parser.getScanAll()
         );
 
-        std::unique_ptr<I_Module> module = ModuleFactory::createModule(factoryCtx);
+        std::unique_ptr<Module> module_running = ModuleFactory::createModule(factoryCtx);
 
-        if (module) {
+        if (module_running) {
             std::string baseDN = parser.makeBaseDN();
             ModuleRuntimeContext runtimeCtx(
-                ldap, 
+                ldap_connection, 
                 baseDN,
                 parser.getFilePath()
             );
 
-            module->run(runtimeCtx);
+            module_running->run(runtimeCtx);
 
         } else {
-            if (parser.getModuleToRun() != Module::NONE) {
+            if (parser.getModuleToRun() != Modules::NONE) {
                 std::cerr << Colors::COLOR_RED << "[-] Error: Failed to initialize the selected module." << Colors::COLOR_RESET << std::endl;
             }
         }
@@ -76,6 +76,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::cout << "\nEyes..." << std::endl;
+    std::cout << "\nGood night hunter" << std::endl;
     return 0;
 }
