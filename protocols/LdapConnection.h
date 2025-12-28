@@ -22,8 +22,8 @@ using LDAPResult = std::vector<std::map<std::string, std::vector<std::string>>>;
  * Uso típico:
  * @code
  *   LdapConnection ldap;
- *   if (ldap.connect("192.168.1.1", 389)) {
- *       if (ldap.bind("CN=user,DC=domain,DC=com", "password")) {
+ *   if (ldap.initialize("192.168.1.1", 389)) {
+ *       if (ldap.login("CN=user,DC=domain,DC=com", "password")) {
  *           auto results = ldap.executeQueryAndUnpackData(
  *               "DC=domain,DC=com",
  *               "(objectClass=user)",
@@ -47,7 +47,9 @@ public:
      * @param port Porta LDAP (padrão: 389, LDAPS: 636)
      * @return true se conectado com sucesso
      */
-    bool connect(const std::string& host, unsigned short port = 389);
+    bool initialize(const std::string& host, unsigned short port = 389);
+
+    bool connect();
     
     /**
      * @brief Desconecta do servidor LDAP
@@ -60,7 +62,7 @@ public:
      * @param password Senha do usuário
      * @return true se autenticado com sucesso
      */
-    bool bind(const std::string& username, const std::string& password);
+    bool login(const std::string& username, const std::string& password);
 
     /**
      * @brief Executa busca com escopo BASE (apenas o objeto especificado)
@@ -128,6 +130,10 @@ private:
     bool setProtocolVersion();
     bool setNetworkTimeout();
     void disableReferralChasing();
+    void setupSecurityDescriptorAttributes(
+        LDAPControl& sd_control,
+        LDAPControl* server_ctrls[]
+    );
 
     void cleanup();
 

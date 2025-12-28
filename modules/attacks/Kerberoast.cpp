@@ -32,7 +32,7 @@ std::vector<std::string> Attacks::Kerberoast::listUser(const std::string& baseDN
             if (username == "krbtgt") {
                 continue;
             }
-            std::cout << Colors::COLOR_YELLOW << "  [+] User: " << username << Colors::COLOR_RESET << std::endl;
+            std::cout << "  [+] User: " << Colors::COLOR_YELLOW << username << Colors::COLOR_RESET << std::endl;
             if (spn != userObject.end()) {
                 for (const auto& _spn : spn->second) {
                     kerberoastable_users_spns.push_back(_spn); 

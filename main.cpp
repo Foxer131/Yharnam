@@ -24,19 +24,21 @@ int main(int argc, char* argv[]) {
         
         LdapConnection ldap_connection; 
         std::string targetIP = parser.getIP();
+        ldap_connection.initialize(targetIP);
 
-        if (!ldap_connection.connect(targetIP)) {
-            std::cerr << Colors::COLOR_RED << "[-] Failed to connect to LDAP at " << targetIP << Colors::COLOR_RESET << std::endl;
+        if (!ldap_connection.connect()) {
+            std::cerr << Colors::COLOR_RED << "[-] Failed to initialize to LDAP at " << targetIP << Colors::COLOR_RESET << std::endl;
             return 1;
         }
         std::cout << Colors::COLOR_BLUE << "[+] Connection established \t\t" << targetIP << Colors::COLOR_RESET << std::endl;
 
         User user = parser.getUser();
-        if (!ldap_connection.bind(user.username, user.password)) {
+        
+        if (!ldap_connection.login(user.username, user.password)) {
             std::cerr << Colors::COLOR_RED << "[-] Authentication failed for " << user.username << Colors::COLOR_RESET << std::endl;
             return 1;
         }
-        std::cout << Colors::COLOR_GREEN << "[*] Authenticated successfully \t" << user.username << Colors::COLOR_RESET << std::endl;
+        std::cout << Colors::COLOR_GREEN << "[*] Authenticated successfully \t\t" << user.username << Colors::COLOR_RESET << std::endl;
 
         KerberosInteraction krbService;
         AclService acl;
@@ -76,6 +78,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::cout << "\nGood night hunter" << std::endl;
+    std::cout << "\nGood night hunter." << std::endl;
     return 0;
 }

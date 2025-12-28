@@ -69,7 +69,7 @@ LdapConnection::~LdapConnection() {
     disconnect(); 
 }
 
-bool LdapConnection::connect(const std::string& host, unsigned short port) {
+bool LdapConnection::initialize(const std::string& host, unsigned short port) {
     if (isConnected_) {
         disconnect();
     }
@@ -83,8 +83,42 @@ bool LdapConnection::connect(const std::string& host, unsigned short port) {
         return false;
     }
 
-    isConnected_ = true;
     return true;
+}
+
+bool LdapConnection::connect() {
+    if (ldapSession == nullptr) {
+        std::cerr << "LDAP Session not initialized. Call initialize() first." << std::endl;
+        return false;
+    }
+
+    std::vector<char*> attrs = {
+        (char*)"defaultNamingContext",
+        (char*)"dnsHostName",
+        nullptr
+    };
+
+    LDAPMessage* res = nullptr;
+
+    int rc = executeLdapSearch(
+        "",                 
+        LDAP_SCOPE_BASE,    
+        "(objectClass=*)",  
+        attrs,              
+        nullptr,            
+        &res               
+    );
+
+    cleanupSearchResources(res);
+
+    if (rc == LDAP_SUCCESS || rc == LDAP_OPERATIONS_ERROR || rc == LDAP_STRONG_AUTH_REQUIRED) {
+        isConnected_ = true;
+        return true;
+    }
+
+    std::cerr << "[-] Connection probe failed: " << ldap_err2string(rc) << std::endl;
+    isConnected_ = false;
+    return false;
 }
 
 void LdapConnection::disconnect() {
@@ -93,9 +127,9 @@ void LdapConnection::disconnect() {
     isAuthenticated_ = false;
 }
 
-bool LdapConnection::bind(const std::string& username, const std::string& password) {
+bool LdapConnection::login(const std::string& username, const std::string& password) {
     if (!isConnected_) {
-        std::cerr << "LdapConnection::bind: Not connected" << std::endl;
+        std::cerr << "LdapConnection::login: Not connected" << std::endl;
         return false;
     }
 
@@ -139,8 +173,8 @@ LDAPResult LdapConnection::performSpecifiedScopeSearch(
     const std::string& baseDN, 
     int scope, 
     const std::string& query, 
-    const std::vector<std::string>& attributes) 
-{
+    const std::vector<std::string>& attributes
+) {
     if (!isConnected_ || !isAuthenticated_) {
         return LDAPResult();
     }
@@ -148,20 +182,21 @@ LDAPResult LdapConnection::performSpecifiedScopeSearch(
     LDAPMessage* res = nullptr;
     auto [attrArray, needsSecurityDescriptor] = prepareAttributeArray(attributes);
     
-    static char ber_val[] = { 0x30, 0x03, 0x02, 0x01, 0x07 };
-    static struct berval bval = { 5, ber_val };
-    
     LDAPControl sd_control;
     LDAPControl* server_ctrls[2] = {nullptr, nullptr};
     
     if (needsSecurityDescriptor) {
-        sd_control.ldctl_oid = (char*)"1.2.840.113556.1.4.801";
-        sd_control.ldctl_iscritical = 1;
-        sd_control.ldctl_value = bval;
-        server_ctrls[0] = &sd_control;
+        setupSecurityDescriptorAttributes(sd_control, server_ctrls);
     }
     
-    int returnCode = executeLdapSearch(baseDN, scope, query, attrArray, server_ctrls, &res);
+    int returnCode = executeLdapSearch(
+        baseDN, 
+        scope, 
+        query, 
+        attrArray, 
+        server_ctrls, 
+        &res
+    );
     
     LDAPResult results = processSearchResults(res);
     
@@ -169,6 +204,24 @@ LDAPResult LdapConnection::performSpecifiedScopeSearch(
     cleanupSearchResources(res);
     
     return results;
+}
+
+void LdapConnection::setupSecurityDescriptorAttributes(
+    LDAPControl& sd_control,
+    LDAPControl* server_ctrls[]
+) {
+
+    // Sequência BER codificada manualmente para o valor inteiro 7.
+    // Estrutura: SEQUENCE (0x30) de tam 3, contendo INTEGER (0x02) de tam 1, com valor 0x07.
+    // O valor 7 (OWNER|GROUP|DACL) instrui o servidor a retornar o Security Descriptor 
+    // sem a SACL (informações de auditoria), o que requer privilégios elevados
+    static char ber_val[] = { 0x30, 0x03, 0x02, 0x01, 0x07 };
+    static struct berval bval = { 5, ber_val };
+    sd_control.ldctl_oid = (char*)"1.2.840.113556.1.4.801";
+    sd_control.ldctl_iscritical = 1;
+    sd_control.ldctl_value = bval;
+    server_ctrls[0] = &sd_control;
+    server_ctrls[1] = NULL;
 }
 
 inline bool LdapConnection::isAuthenticated() const { 
@@ -252,8 +305,8 @@ inline struct berval LdapConnection::createCredentials(const std::string& passwo
 }
 
 std::pair<std::vector<char*>, bool> LdapConnection::prepareAttributeArray(
-    const std::vector<std::string>& attributes) const 
-{
+const std::vector<std::string>& attributes
+) const {
     std::vector<char*> attr;
     bool needsSecurityDescriptor = false;
 
@@ -275,11 +328,10 @@ int LdapConnection::executeLdapSearch(
     const std::string& query,
     const std::vector<char*>& attributes,
     LDAPControl** serverControls,
-    LDAPMessage** result) 
-{
+    LDAPMessage** result
+) {
     disableReferralChasing();
     
-    // Timeout para a operação de busca (30 segundos)
     struct timeval search_timeout;
     search_timeout.tv_sec = 30;
     search_timeout.tv_usec = 0;
@@ -293,7 +345,7 @@ int LdapConnection::executeLdapSearch(
         0, 
         serverControls, 
         NULL, 
-        &search_timeout,  // Timeout adicionado
+        &search_timeout,
         0, 
         result
     );

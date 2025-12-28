@@ -163,6 +163,7 @@ bool ArgumentParser::parse(int& argc, char* argv[]) {
                 break;
             }
             case hash("-h"):
+            case hash("--help"):
                 printHelp();
                 return false;
             case hash("--kerberoast"):
@@ -178,6 +179,11 @@ bool ArgumentParser::parse(int& argc, char* argv[]) {
         }
     }
 
+    if (DC.empty() && user.username.find("@") == std::string::npos) {
+        std::transform(ip.begin(), ip.end(), ip.begin(), ::toupper);
+        user.username += "@" + ip;
+    }
+    
     if (ip.empty() || user.username.empty() || user.password.empty()) {
         std::cerr << "\nError: Missing one or more required arguments." << std::endl;
         printHelp();

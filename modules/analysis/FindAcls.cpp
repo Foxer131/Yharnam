@@ -60,9 +60,12 @@ static std::string bytesToSidString(const std::string& rawVal) {
 }
 
 std::string Analysis::FindAcls::resolveSid(const std::string& sidStr, const std::string& baseDN) {
-    if (sidNameCache.count(sidStr)) return sidNameCache[sidStr];
-    if (sidStr == "S-1-5-11") return "Authenticated Users";
-    if (sidStr == "S-1-1-0") return "Everyone";
+    if (sidNameCache.count(sidStr)) 
+        return sidNameCache[sidStr];
+    if (sidStr == "S-1-5-11") 
+        return "Authenticated Users";
+    if (sidStr == "S-1-1-0") 
+        return "Everyone";
     if (sidStr.find("-512") != std::string::npos && sidStr.length() < 45) return "Domain Admins";
     return sidStr;
 }
