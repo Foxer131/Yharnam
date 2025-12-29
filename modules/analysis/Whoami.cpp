@@ -5,6 +5,7 @@
 #include <algorithm>
 #include "Analysis.h"
 #include "../../utils/Colors.h"
+#include "../../protocols/AclService.h"
 
 static std::string filetimeToString(const std::string& filetimeStr) {
     try {
@@ -55,15 +56,12 @@ static std::string decodeUAC(const std::string& uacStr) {
 Analysis::Whoami::Whoami(LdapQuerier& ldap_, const std::string& username_) 
     : ldap(ldap_), 
     username(username_) 
-    {}
+{}
 
 void Analysis::Whoami::run(const ModuleRuntimeContext& ctx) {
     std::cout << "[*] Querying LDAP for current user metadata..." << std::endl;
 
-    std::string shortUsername = username;
-    size_t pos = shortUsername.find("@");
-    if (pos != std::string::npos)
-        shortUsername = shortUsername.substr(0, pos);
+    std::string shortUsername = extractShortUsername(username);
 
     std::string query = "(sAMAccountName=" + shortUsername + ")";
     std::vector<std::string> attributes = {
@@ -78,75 +76,131 @@ void Analysis::Whoami::run(const ModuleRuntimeContext& ctx) {
         "objectSid"
     };
 
-    auto results = ldap.executeQueryAndUnpackData(ctx.baseDN, query, attributes);
-
-    if (results.empty()) {
+    auto whoami_data = fetchCurrentUser(shortUsername, ctx.baseDN);
+    
+    
+    if (whoami_data.empty()) {
         std::cerr << Colors::COLOR_RED << "[-] Error: Could not find user object '" 
-                  << shortUsername << "' in base '" << ctx.baseDN << "'" 
-                  << Colors::COLOR_RESET << std::endl;
+        << shortUsername << "' in base '" << ctx.baseDN << "'" 
+        << Colors::COLOR_RESET << std::endl;
         return;
     }
     
-    const auto& whoami_data = results[0];
+    displayUserMetadata(whoami_data);
+    displayGroupMembership(whoami_data);
 
-    
-    std::cout << "\n" << Colors::COLOR_GREEN << "[*] Whoami: " << shortUsername << Colors::COLOR_RESET << "\n";
+    std::cout << "\n";
+}
 
-    auto printAttr = [&](const char* label, const std::string& key, bool isDate = false, bool isUAC = false) {
-        if (whoami_data.count(key) && !whoami_data.at(key).empty()) {
-            std::string val = whoami_data.at(key).front();
-            
-            if (isDate) 
-                val = filetimeToString(val);
-            if (isUAC)  
-                val = decodeUAC(val) + " (" + val + ")";
-            
-            std::cout << std::left << std::setw(20) << label << ": " << val << "\n";
-        }
+SingleLDAPResult Analysis::Whoami::fetchCurrentUser(
+    const std::string& shortUser, 
+    const std::string& baseDN
+) {
+    std::string query = "(sAMAccountName=" + shortUser + ")";
+    std::vector<std::string> attributes = {
+        "distinguishedName",
+        "description",
+        "memberOf",           
+        "pwdLastSet",         
+        "lastLogon",          
+        "adminCount",         
+        "userAccountControl",
+        "primaryGroupID",
+        "objectSid"
     };
 
-    printAttr("Distinguished Name", "distinguishedName");
-    printAttr("Description",        "description");
-    printAttr("SID",                "objectSid"); // Virá em Base64/Binário até usarmos libndr
-    printAttr("Account Status",     "userAccountControl", false, true);
-    printAttr("Password Last Set",  "pwdLastSet", true);
-    printAttr("Last Logon",         "lastLogon", true);
+    auto results = ldap.executeQueryAndUnpackData(baseDN, query, attributes);
 
-    if (whoami_data.count("adminCount")) {
-        std::string val = whoami_data.at("adminCount").front();
-        if (val == "1") {
+    if (results.empty()) {
+        return {};
+    }
+    return results[0];
+}
+
+void Analysis::Whoami::displayUserMetadata(const SingleLDAPResult& userData) const {
+    printAttribute(userData, "distinguishedName", "Distinguished Name");
+    printAttribute(userData, "description",       "Description");
+    
+    printAttribute(userData, "objectSid",         "SID", false, false, true); 
+    
+    printAttribute(userData, "userAccountControl", "Account Status", false, true);
+    printAttribute(userData, "pwdLastSet",         "Password Last Set", true);
+    printAttribute(userData, "lastLogon",          "Last Logon", true);
+
+    if (userData.count("adminCount") && !userData.at("adminCount").empty()) {
+        if (userData.at("adminCount").front() == "1") {
             std::cout << std::left << std::setw(20) << "Privileges" << ": " 
-                      << Colors::COLOR_RED << "HIGH VALUE TARGET (AdminCount=1)" << Colors::COLOR_RESET << "\n";
+                      << Colors::COLOR_RED << "HIGH VALUE TARGET (AdminCount=1)" 
+                      << Colors::COLOR_RESET << "\n";
         }
     }
+}
 
+void Analysis::Whoami::displayGroupMembership(const SingleLDAPResult& userData) const {
     std::cout << "\n" << Colors::COLOR_YELLOW << "--- Group Membership ---" << Colors::COLOR_RESET << "\n";
 
-    if (whoami_data.count("primaryGroupID")) {
-        std::string pgid = whoami_data.at("primaryGroupID").front();
-        std::string groupName;
-        
-        if (pgid == "513") 
-            groupName = "Domain Users";
-        else if (pgid == "512") 
-            groupName = "Domain Admins";
-        else if (pgid == "514") 
-            groupName = "Domain Guests";
-        else if (pgid == "515") 
-            groupName = "Domain Computers";
-        else if (pgid == "516") 
-            groupName = "Domain Controllers";
-        else 
-            groupName = "RID-" + pgid;
-
+    if (userData.count("primaryGroupID") && !userData.at("primaryGroupID").empty()) {
+        std::string pgid = userData.at("primaryGroupID").front();
+        std::string groupName = resolvePrimaryGroup(pgid);
         std::cout << "  * " << groupName << " (Primary Group)\n";
     }
 
-    if (whoami_data.count("memberOf")) {
-        for (const auto& groupDN : whoami_data.at("memberOf")) {
+    if (userData.count("memberOf")) {
+        for (const auto& groupDN : userData.at("memberOf")) {
             std::cout << "  - " << extractCN(groupDN) << "\n";
         }
     }
+}
+
+void Analysis::Whoami::printAttribute(
+    const SingleLDAPResult& data, 
+    const std::string& key, 
+    const std::string& label, 
+    bool isDate, 
+    bool isUAC,
+    bool isSid
+) const {
+    if (!data.count(key) || data.at(key).empty()) 
+        return;
+
+    std::string val = data.at(key).front();
     
-    std::cout << "\n";
+    if (isDate) {
+        val = filetimeToString(val); 
+    }
+    if (isUAC) {
+        val = decodeUAC(val) + " (" + val + ")";
+    }
+    if (isSid) {
+        auto sidBytes = AclService::decodeData(val);
+        val = AclService::sidToString(sidBytes);
+    }
+    
+    std::cout << std::left << std::setw(20) << label << ": " << val << "\n";
+}
+
+std::string Analysis::Whoami::resolvePrimaryGroup(const std::string& rid) const {
+    static const std::map<std::string, std::string> ridMap = {
+        {"512", "Domain Admins"},
+        {"513", "Domain Users"},
+        {"514", "Domain Guests"},
+        {"515", "Domain Computers"},
+        {"516", "Domain Controllers"},
+        {"518", "Schema Admins"},
+        {"519", "Enterprise Admins"},
+        {"520", "Group Policy Creator Owners"}
+    };
+
+    auto it = ridMap.find(rid);
+    if (it != ridMap.end()) {
+        return it->second;
+    }
+    return "RID-" + rid;
+}
+
+std::string Analysis::Whoami::extractShortUsername(const std::string& fullUsername) const {
+    size_t pos = fullUsername.find("@");
+    if (pos != std::string::npos)
+        return fullUsername.substr(0, pos);
+    return fullUsername;
 }

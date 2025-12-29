@@ -4,6 +4,7 @@
 #include <map>
 
 using LDAPResult = std::vector<std::map<std::string, std::vector<std::string>>>;
+using SingleLDAPResult = std::map<std::string, std::vector<std::string>>;
 
 class LdapQuerier {
 public:

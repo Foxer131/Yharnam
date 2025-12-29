@@ -101,7 +101,7 @@ bool ArgumentParser::parse(int& argc, char* argv[]) {
 
     ip = argv[1];
 
-    for (int i = 1; i < argc; i++) {
+    for (int i{1}; i < argc; i++) {
         const unsigned int rule = hash(argv[i]);
         switch (rule) {
             case hash("-u"): {
@@ -124,7 +124,7 @@ bool ArgumentParser::parse(int& argc, char* argv[]) {
             case hash("-q") : {
                 if (i + 1 < argc)
                     query = argv[++i];
-                currentModule = QUERY;
+                currentModule = Modules::QUERY;
                 break;
             }
             case hash("--attrs"):
@@ -139,10 +139,10 @@ bool ArgumentParser::parse(int& argc, char* argv[]) {
                 }
                 break;
             case hash("--whoami"):
-                currentModule = WHOAMI;
+                currentModule = Modules::WHOAMI;
                 break;
             case hash("--find-acls"): {
-                currentModule = FINDACLS;
+                currentModule = Modules::FINDACLS;
                 if (i + 1< argc && std::string(argv[i+1]).rfind("-", 0) != 0) {
                     std::string alvo = argv[++i];
                     if (alvo == "all")
@@ -167,10 +167,10 @@ bool ArgumentParser::parse(int& argc, char* argv[]) {
                 printHelp();
                 return false;
             case hash("--kerberoast"):
-                currentModule = KERBEROAST;
+                currentModule = Modules::KERBEROAST;
                 break;
             case hash("--asreproast"):
-                currentModule = ASREPROAST;
+                currentModule = Modules::ASREPROAST;
                 break;
             case hash("-outputfile"):
                 if (i + 1 < argc)

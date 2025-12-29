@@ -7,7 +7,10 @@
 Analysis::Query::Query(LdapQuerier& _ldap, 
     const std::string& _query, 
     const std::vector<std::string>& _attrs)
-: ldap(_ldap), queryFilter(_query), attributesToFetch(_attrs) {}
+    : ldap(_ldap), 
+    queryFilter(_query), 
+    attributesToFetch(_attrs) 
+{}
 
 void Analysis::Query::run(const ModuleRuntimeContext& ctx) {
     if (queryFilter.empty()) {
@@ -40,7 +43,6 @@ void Analysis::Query::displayResults(const LDAPResult& results) {
     for (const auto& objectMap : results) {
         std::cout << "Object #" << count++ << "\n";
         
-        // Itera sobre os atributos do objeto (Map: String -> Vector<String>)
         for (const auto& [attrName, values] : objectMap) {
             std::cout << Colors::COLOR_YELLOW << "  " << std::left << std::setw(25) << attrName << ": " << Colors::COLOR_RESET;
             

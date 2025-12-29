@@ -10,8 +10,6 @@ typedef struct ldapmsg LDAPMessage;
 typedef struct ldapcontrol LDAPControl;
 typedef struct berval berval;
 
-using LDAPResult = std::vector<std::map<std::string, std::vector<std::string>>>;
-
 /**
  * @class LdapConnection
  * @brief Classe para gerenciamento de conexões LDAP/AD
@@ -153,7 +151,7 @@ private:
     );
 
     LDAPResult processSearchResults(LDAPMessage* result);
-    std::map<std::string, std::vector<std::string>> processEntry(LDAPMessage* entry);
+    SingleLDAPResult processEntry(LDAPMessage* entry);
     std::vector<std::string> extractAttributeValues(LDAPMessage* entry, const char* attributeName);
     std::string encodeAttributeValue(berval* value) const;
 

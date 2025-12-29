@@ -8,7 +8,7 @@ typedef struct {
     std::string username;
 } User;
 
-enum Modules {
+enum class Modules {
     KERBEROAST,
     ASREPROAST,
     GOLDEN_TICKET,
@@ -25,7 +25,7 @@ class ArgumentParser {
     std::string DC;
     std::string ip;
     std::string file_path;
-    Modules currentModule = NONE;
+    Modules currentModule = Modules::NONE;
     // Analysis::Query
     std::string query;
     std::vector<std::string> customAttributes;

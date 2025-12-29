@@ -3,190 +3,388 @@
 #include <vector>
 #include <string>
 #include <sstream>
-#include <cstdint> 
+#include <set>
+#include <algorithm>
 #include "Analysis.h" 
 #include "../../utils/Colors.h"
 
-extern "C" {
-    #include <talloc.h>
-    #include <samba-4.0/gen_ndr/security.h> 
-    #include <samba-4.0/ndr.h>                  
-
-    ndr_err_code ndr_pull_security_descriptor(struct ndr_pull *ndr, int ndr_flags, struct security_descriptor *r);
-    
-    #ifndef NDR_ERR_CODE_IS_SUCCESS
-    #define NDR_ERR_CODE_IS_SUCCESS(x) ((x) == NDR_ERR_SUCCESS)
-    #endif
+static const char* getPermissionColor(const std::string& perm) {
+    if (perm == "GenericAll" || perm == "WriteDacl" || perm == "WriteOwner" || perm == "FullControl") {
+        return Colors::COLOR_RED;
+    }
+    return Colors::COLOR_YELLOW;
 }
 
-// Definições de Máscaras
-#define PERM_GENERIC_ALL        0x10000000
-#define PERM_GENERIC_EXECUTE    0x20000000
-#define PERM_GENERIC_WRITE      0x40000000
-#define PERM_GENERIC_READ       0x80000000
-#define PERM_WRITE_DAC          0x00040000
-#define PERM_WRITE_OWNER        0x00080000
-#define PERM_DS_CREATE_CHILD    0x00000001
-#define PERM_DS_DELETE_CHILD    0x00000002
-#define PERM_DS_SELF            0x00000008
-#define PERM_DS_WRITE_PROP      0x00000020
-#define PERM_DS_CONTROL_ACCESS  0x00000100
-
-Analysis::FindAcls::FindAcls(LdapQuerier& ldap_, 
-                            AclService& acl_, 
-                            const std::string& username_,
-                            const std::vector<std::string>& customTargets_,
-                            bool scanAll_    
-                        ) 
-    : 
-    ldap(ldap_), 
-    acl(acl_), 
-    myUsername(username_), 
-    scanAll(scanAll_) {
-        if (!customTargets_.empty()) {
-            targets = customTargets_;
-            scanAll = false; 
-        }
+Analysis::FindAcls::FindAcls(
+    LdapQuerier& ldap_, 
+    AclService& acl_, 
+    const std::string& username_,
+    const std::vector<std::string>& customTargets_,
+    bool scanAll_
+) 
+    : ldap(ldap_)
+    , acl(acl_)
+    , myUsername(username_)
+    , scanAll(scanAll_) 
+{
+    if (!customTargets_.empty()) {
+        targets = customTargets_;
+        scanAll = false; 
     }
-
-static std::string bytesToSidString(const std::string& rawVal) {
-    std::vector<unsigned char> bytes;
-    if (rawVal.substr(0, 2) == "::") {
-        bytes = AclService::base64Decode(rawVal.substr(2));
-    } else {
-        bytes.assign(rawVal.begin(), rawVal.end());
-    }
-    return AclService::sidToString(bytes);
-}
-
-std::string Analysis::FindAcls::resolveSid(const std::string& sidStr, const std::string& baseDN) {
-    if (sidNameCache.count(sidStr)) 
-        return sidNameCache[sidStr];
-    if (sidStr == "S-1-5-11") 
-        return "Authenticated Users";
-    if (sidStr == "S-1-1-0") 
-        return "Everyone";
-    if (sidStr.find("-512") != std::string::npos && sidStr.length() < 45) return "Domain Admins";
-    return sidStr;
-}
-
-std::vector<std::string> Analysis::FindAcls::enumerateAllUsers(const std::string& baseDN) {
-    std::cout << "    [*] Enumerating all users (may take a while)" << std::endl;
-    std::string query = "(&(objectClass=user)(objectCategory=person)(!(objectClass=computer))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))";
-    std::vector<std::string> attrs = {"sAMAccountName"};
-    auto results = ldap.executeQueryAndUnpackData(baseDN, query, attrs);
-
-    std::vector<std::string> users;
-    for (const auto& entry : results) {
-        if (entry.count("sAMAccountName")) 
-            users.push_back(entry.at("sAMAccountName").front());
-    }
-    return users;
-}
-
-void Analysis::FindAcls::populateMySids(const std::string& baseDN) {
-    std::string shortUser = myUsername;
-    size_t at = shortUser.find('@');
-    if (at != std::string::npos) 
-        shortUser = shortUser.substr(0, at);
-    
-    std::string query = "(sAMAccountName=" + shortUser + ")";
-    std::vector<std::string> attrs = {"distinguishedName"};
-    auto resDN = ldap.executeQueryAndUnpackData(baseDN, query, attrs);
-    
-    if(resDN.empty()) {
-        std::cerr << Colors::COLOR_RED << "[-] Error: Could not find user " << shortUser << ". Filtering disabled." << Colors::COLOR_RESET << std::endl;
-        return;
-    }
-    
-    std::string userDN = resDN[0].at("distinguishedName").front();
-    
-    auto resGroups = ldap.executeBaseScopeQueryAndUnpackData(userDN, "(objectClass=*)", {"objectSid", "tokenGroups"});
-    if(resGroups.empty()) {
-        std::cerr << Colors::COLOR_RED << "[-] Error: Could not retrieve tokenGroups for " << shortUser << Colors::COLOR_RESET << std::endl;
-        return;
-    }
-
-    const auto& me = resGroups[0];
-
-    if (me.count("objectSid")) {
-        std::string sid = bytesToSidString(me.at("objectSid").front());
-        mySids.insert(sid);
-        sidNameCache[sid] = shortUser;
-    }
-
-    if (me.count("tokenGroups")) {
-        for (const auto& val : me.at("tokenGroups")) {
-            std::string grpSid = bytesToSidString(val);
-            mySids.insert(grpSid);
-        }
-    }
-    
-    mySids.insert("S-1-1-0"); // Everyone
-    mySids.insert("S-1-5-11"); // Auth Users
-    sidNameCache["S-1-1-0"] = "Everyone";
-    sidNameCache["S-1-5-11"] = "Auth Users";
 }
 
 void Analysis::FindAcls::run(const ModuleRuntimeContext& ctx) {
     populateMySids(ctx.baseDN);
+    
     if (scanAll) {
         targets = enumerateAllUsers(ctx.baseDN);
     }
+    
     std::cout << "    [*] Scanning for ACLs on " << targets.size() << " targets" << std::endl;
     
-    for (const auto& target : targets) 
-        checkTargetForPermissions(target, ctx.baseDN);
+    for (const auto& target : targets) {
+        scanTargetAcls(target, ctx.baseDN);
+    }
 }
 
-void Analysis::FindAcls::checkTargetForPermissions(const std::string& target, const std::string& baseDN) {
+std::vector<std::string> Analysis::FindAcls::enumerateAllUsers(const std::string& baseDN) {
+    std::cout << "    [*] Enumerating all users (may take a while)" << std::endl;
+    
+    std::string query = buildUserEnumerationQuery();
+    std::vector<std::string> attrs = {"sAMAccountName"};
+    
+    auto results = ldap.executeQueryAndUnpackData(baseDN, query, attrs);
+    
+    return extractUserNamesFromResults(results);
+}
+
+void Analysis::FindAcls::populateMySids(const std::string& baseDN) {
+    std::string shortUsername = extractShortUsername(myUsername);
+    std::string userDN = getUserDistinguishedName(shortUsername, baseDN);
+    
+    if (userDN.empty()) {
+        displayUserNotFoundError(shortUsername);
+        return;
+    }
+    
+    collectUserSids(userDN);
+    addWellKnownSids();
+}
+
+void Analysis::FindAcls::scanTargetAcls(const std::string& target, const std::string& baseDN) {
+    std::string securityDescriptor = fetchTargetSecurityDescriptor(target, baseDN);
+    
+    if (securityDescriptor.empty()) {
+        return;
+    }
+    
+    std::vector<Security::Ace> aces = acl.parseDacl(securityDescriptor);
+    std::vector<AclEntry> relevantAcls = filterRelevantAcls(aces, baseDN);
+    
+    if (!relevantAcls.empty()) {
+        displayTargetAcls(target, relevantAcls);
+    }
+}
+
+std::string Analysis::FindAcls::fetchTargetSecurityDescriptor(
+    const std::string& target,
+    const std::string& baseDN
+) {
     std::string query = "(sAMAccountName=" + target + ")";
     std::vector<std::string> attrs = {"nTSecurityDescriptor"};
     
     auto results = ldap.executeQueryAndUnpackData(baseDN, query, attrs);
+    
     if (results.empty()) {
-        // std::cout << "DEBUG: Target " << target << " not found in LDAP." << std::endl;
-        return;
+        return "";
     }
-
+    
     const auto& obj = results[0];
     
     if (!obj.count("nTSecurityDescriptor") || obj.at("nTSecurityDescriptor").empty()) {
-        std::cerr << Colors::COLOR_RED << "[-] Warning: Could not read nTSecurityDescriptor for " << target << " (Access Denied or SD Control missing?)" << Colors::COLOR_RESET << std::endl;
-        return;
+        displaySecurityDescriptorError(target);
+        return "";
     }
-
-    std::string rawSD = results[0].at("nTSecurityDescriptor").front();
-
-    std::vector<AceInfo> aces = acl.parseDacl(rawSD);
     
-    if (aces.empty()) {
-        // std::cout << "DEBUG: No ACEs found for " << target << std::endl;
-    }
+    return obj.at("nTSecurityDescriptor").front();
+}
 
-    bool headerPrinted = false;
-
+std::vector<Analysis::FindAcls::AclEntry> Analysis::FindAcls::filterRelevantAcls(
+    const std::vector<Security::Ace>& aces,
+    const std::string& baseDN
+) {
+    std::vector<AclEntry> relevantAcls;
+    
     for (const auto& ace : aces) {
-        if (ace.trusteeSid == "S-1-5-18" || ace.trusteeSid == "S-1-5-10" || ace.trusteeSid == "S-1-3-0") continue;
+        if (shouldSkipAce(ace)) {
+            continue;
+        }
         
-        if (ace.humanReadablePermissions.find("ExtendedRight") != std::string::npos) 
-            if (ace.trusteeSid == "S-1-1-0" || ace.trusteeSid == "S-1-5-11") 
-                continue;
+        auto permissions = AclService::mapRightsToStrings(ace.rawAccessMask);
+        if (permissions.empty()) {
+            continue;
+        }
+        
+        if (isNoisePermission(ace, permissions)) {
+            continue;
+        }
+        
+        AclEntry entry;
+        entry.trusteeSid = ace.trusteeSid;
+        entry.trusteeName = resolveSid(ace.trusteeSid, baseDN);
+        entry.permissions = permissions;
+        entry.isInherited = ace.isInherited;
+        
+        relevantAcls.push_back(entry);
+    }
+    
+    return relevantAcls;
+}
 
-        if (mySids.empty() || mySids.count(ace.trusteeSid)) {
-            if (!headerPrinted) {
-                std::cout << "[*] Target: " << Colors::COLOR_BLUE << target << Colors::COLOR_RESET << "\n";
-                headerPrinted = true;
-            }
-            
-            std::string name = resolveSid(ace.trusteeSid, baseDN);
-            
-            std::cout << "    -> " << ace.humanReadablePermissions << " granted to: ";
-            if (name != ace.trusteeSid) 
-                std::cout << name;
-            else 
-                std::cout << ace.trusteeSid;
-            std::cout << "\n";
+bool Analysis::FindAcls::shouldSkipAce(const Security::Ace& ace) const {
+    if (isSystemAccount(ace.trusteeSid)) {
+        return true;
+    }
+    
+    bool isPublicSid = isWellKnownPublicSid(ace.trusteeSid);
+    bool belongsToUser = mySids.count(ace.trusteeSid) > 0;
+    bool isRelevant = mySids.empty() || belongsToUser || isPublicSid;
+    
+    return !isRelevant;
+}
+
+inline bool Analysis::FindAcls::isSystemAccount(const std::string& sid) const {
+    return (sid == "S-1-5-18" ||  // SYSTEM
+            sid == "S-1-5-10" ||  // SELF
+            sid == "S-1-3-0");    // CREATOR OWNER
+}
+
+inline bool Analysis::FindAcls::isWellKnownPublicSid(const std::string& sid) const {
+    return (sid == "S-1-1-0" ||   // Everyone
+            sid == "S-1-5-11");   // Authenticated Users
+}
+
+bool Analysis::FindAcls::isNoisePermission(
+    const Security::Ace& ace,
+    const std::vector<std::string>& permissions
+) const {
+    if (isWellKnownPublicSid(ace.trusteeSid) && 
+        permissions.size() == 1 && 
+        permissions[0] == "ExtendedRight") {
+        return true;
+    }
+    
+    return false;
+}
+
+std::string Analysis::FindAcls::resolveSid(const std::string& sidStr, const std::string& baseDN) {
+    if (sidNameCache.count(sidStr)) {
+        return sidNameCache[sidStr];
+    }
+    
+    std::string resolvedName = resolveWellKnownSid(sidStr);
+    if (!resolvedName.empty()) {
+        sidNameCache[sidStr] = resolvedName;
+        return resolvedName;
+    }
+    
+    return resolveNotKnownSid(baseDN, sidStr);
+}
+
+inline std::string Analysis::FindAcls::resolveNotKnownSid(
+    const std::string& baseDN,
+    const std::string& sidStr
+) {
+    std::string query = "(objectSid=" + sidStr + ")";
+    std::vector<std::string> attrs = {"sAMAccountName", "name", "cn"};
+
+    LDAPResult searchResult = ldap.executeQueryAndUnpackData(baseDN, query, attrs);
+
+    if (!searchResult.empty()) {
+        auto entry = searchResult[0];
+        std::string nameFound;
+
+        if (entry.count("sAMAccountName")) 
+            nameFound = entry.at("sAMAccountName").front();
+        else if (entry.count("name")) 
+            nameFound = entry.at("name").front();
+        else if (entry.count("cn")) 
+            nameFound = entry.at("cn").front();
+
+        if (!nameFound.empty()) {
+            sidNameCache[sidStr] = nameFound;
+            return nameFound;
         }
     }
+    return sidStr;
+}
+
+std::string Analysis::FindAcls::resolveWellKnownSid(const std::string& sidStr) const {
+    if (sidStr == "S-1-5-11") 
+        return "Authenticated Users";
+    if (sidStr == "S-1-1-0") 
+        return "Everyone";
+    if (sidStr.find("-512") != std::string::npos && sidStr.length() < 45) 
+        return "Domain Admins";
+    if (sidStr.find("-519") != std::string::npos) 
+        return "Enterprise Admins";
+    if (sidStr.find("-544") != std::string::npos) 
+        return "Administrators";
+    
+    return "";
+}
+
+inline std::string Analysis::FindAcls::buildUserEnumerationQuery() const {
+    return 
+    "(&"
+      "(|"                                     
+         "(&(objectClass=user)(objectCategory=person))"  
+         "(objectClass=group)"                           
+      ")"
+      "(!(objectClass=computer))"               
+      "(!(userAccountControl:1.2.840.113556.1.4.803:=2))"
+    ")";
+}
+
+std::vector<std::string> Analysis::FindAcls::extractUserNamesFromResults(
+    const LDAPResult& results
+) const {
+    std::vector<std::string> users;
+    
+    for (const auto& entry : results) {
+        if (entry.count("sAMAccountName")) {
+            users.push_back(entry.at("sAMAccountName").front());
+        }
+    }
+    
+    return users;
+}
+
+inline std::string Analysis::FindAcls::extractShortUsername(const std::string& fullUsername) const {
+    size_t atPos = fullUsername.find('@');
+    if (atPos != std::string::npos) {
+        return fullUsername.substr(0, atPos);
+    }
+    return fullUsername;
+}
+
+std::string Analysis::FindAcls::getUserDistinguishedName(
+    const std::string& username,
+    const std::string& baseDN
+) {
+    std::string query = "(sAMAccountName=" + username + ")";
+    std::vector<std::string> attrs = {"distinguishedName"};
+    
+    auto results = ldap.executeQueryAndUnpackData(baseDN, query, attrs);
+    
+    if (results.empty()) {
+        return "";
+    }
+    
+    return results[0].at("distinguishedName").front();
+}
+
+void Analysis::FindAcls::collectUserSids(const std::string& userDN) {
+    auto results = ldap.executeBaseScopeQueryAndUnpackData(
+        userDN,
+        "(objectClass=*)",
+        {"objectSid", "tokenGroups"}
+    );
+    
+    if (results.empty()) {
+        return;
+    }
+    
+    const auto& userEntry = results[0];
+    
+    addUserPrimarySid(userEntry);
+    addUserGroupSids(userEntry);
+}
+
+void Analysis::FindAcls::addUserPrimarySid(const SingleLDAPResult& userEntry) {
+    if (!userEntry.count("objectSid")) {
+        return;
+    }
+    
+    std::string sid = acl.sidToString(
+        acl.decodeData(userEntry.at("objectSid").front())
+    );
+    
+    mySids.insert(sid);
+    
+    std::string shortUsername = extractShortUsername(myUsername);
+    sidNameCache[sid] = shortUsername;
+}
+
+void Analysis::FindAcls::addUserGroupSids(const SingleLDAPResult& userEntry) {
+    if (!userEntry.count("tokenGroups")) {
+        return;
+    }
+    
+    for (const auto& encodedSid : userEntry.at("tokenGroups")) {
+        std::string groupSid = acl.sidToString(acl.decodeData(encodedSid));
+        mySids.insert(groupSid);
+    }
+}
+
+inline void Analysis::FindAcls::addWellKnownSids() {
+    mySids.insert("S-1-1-0");   // Everyone
+    mySids.insert("S-1-5-11");  // Authenticated Users
+}
+
+void Analysis::FindAcls::displayTargetAcls(
+    const std::string& target,
+    const std::vector<AclEntry>& aclEntries
+) const {
+    std::cout << "\n[" << Colors::COLOR_BLUE << target << Colors::COLOR_RESET << "]\n";
+    
+    for (const auto& entry : aclEntries) {
+        displaySingleAclEntry(entry);
+    }
+}
+
+void Analysis::FindAcls::displaySingleAclEntry(const AclEntry& entry) const {
+    // Format: [Victim]
+    //   TRUSTEE_NAME → permission1, permission2, permission3"
+    std::cout << "  ";
+    
+    if (entry.isInherited) {
+        std::cout << Colors::COLOR_YELLOW << "Group Delegated" << Colors::COLOR_RESET << std::endl;
+        std::cout << "  ";
+    }
+    if (entry.trusteeName != entry.trusteeSid) {
+        std::cout << Colors::COLOR_GREEN << entry.trusteeName << Colors::COLOR_RESET;
+    } else {
+        std::cout << entry.trusteeSid;
+    }
+
+    std::cout << "  ->  ";
+    
+    displayPermissionList(entry.permissions);
+    
+    std::cout << "\n";
+}
+
+void Analysis::FindAcls::displayPermissionList(const std::vector<std::string>& permissions) const {
+    for (size_t i = 0; i < permissions.size(); ++i) {
+        const char* color = getPermissionColor(permissions[i]);
+        std::cout << color << permissions[i] << Colors::COLOR_RESET;
+        
+        if (i < permissions.size() - 1) {
+            std::cout << ", ";
+        }
+    }
+}
+
+inline void Analysis::FindAcls::displayUserNotFoundError(const std::string& username) const {
+    std::cerr << Colors::COLOR_RED 
+              << "[-] Error: Could not find user " << username 
+              << ". Filtering disabled." 
+              << Colors::COLOR_RESET << std::endl;
+}
+
+inline void Analysis::FindAcls::displaySecurityDescriptorError(const std::string& target) const {
+    std::cerr << Colors::COLOR_RED 
+              << "[-] Warning: Could not read nTSecurityDescriptor for " << target 
+              << Colors::COLOR_RESET << std::endl;
 }

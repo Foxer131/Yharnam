@@ -108,16 +108,17 @@ bool LdapConnection::connect() {
         nullptr,            
         &res               
     );
+    LDAPResult result = processSearchResults(res);
 
     cleanupSearchResources(res);
-
+    
     if (rc == LDAP_SUCCESS || rc == LDAP_OPERATIONS_ERROR || rc == LDAP_STRONG_AUTH_REQUIRED) {
         isConnected_ = true;
         return true;
     }
+    
 
-    std::cerr << "[-] Connection probe failed: " << ldap_err2string(rc) << std::endl;
-    isConnected_ = false;
+    handleSearchError(rc, result);
     return false;
 }
 
@@ -371,8 +372,8 @@ LDAPResult LdapConnection::processSearchResults(LDAPMessage* result) {
     return results;
 }
 
-std::map<std::string, std::vector<std::string>> LdapConnection::processEntry(LDAPMessage* entry) {
-    std::map<std::string, std::vector<std::string>> entryData;
+SingleLDAPResult LdapConnection::processEntry(LDAPMessage* entry) {
+    SingleLDAPResult entryData;
     BerElement* ber = nullptr;
     
     for (char* attrName = ldap_first_attribute(ldapSession, entry, &ber);
@@ -402,7 +403,7 @@ std::vector<std::string> LdapConnection::extractAttributeValues(
         return values;
     }
     
-    for (int i = 0; rawValues[i] != nullptr; i++) {
+    for (size_t i{}; rawValues[i] != nullptr; i++) {
         std::string encodedValue = encodeAttributeValue(rawValues[i]);
         values.push_back(encodedValue);
     }

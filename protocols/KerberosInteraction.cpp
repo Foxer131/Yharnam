@@ -37,7 +37,10 @@ std::unique_ptr<krb5_creds, Krb5UserCredsDeleter> KerberosInteraction::requestRa
         return nullptr;
     }
 
-    std::unique_ptr<krb5_creds, Krb5UserCredsDeleter> creds = obtainInitialCredentials(principal.get(), password);
+    std::unique_ptr<krb5_creds, Krb5UserCredsDeleter> creds = obtainInitialCredentials(
+        principal.get(), 
+        password
+    );
     if (!creds) {
         return nullptr;
     }
@@ -214,8 +217,8 @@ bool KerberosInteraction::storeInCache(krb5_ccache cache, const krb5_creds& cred
 
 std::unique_ptr<krb5_creds, Krb5UserCredsDeleter> KerberosInteraction::prepareServiceRequest(
     krb5_principal userPrincipal,
-    krb5_principal servicePrincipal) 
-{
+    krb5_principal servicePrincipal
+) {
     krb5_creds* raw_creds = new krb5_creds();
     std::memset(raw_creds, 0, sizeof(krb5_creds));
     
@@ -294,7 +297,10 @@ std::string KerberosTicketFormatter::formatTicket_TGS(krb5_context ctx, const kr
     return buildTGSHash(server_name, server_realm, *etype, checksum_hex, enc_data_hex);
 }
 
-std::string KerberosTicketFormatter::formatTicket_TGT(krb5_context ctx, const krb5_creds& creds) {
+std::string KerberosTicketFormatter::formatTicket_TGT(
+    krb5_context ctx, 
+    const krb5_creds& creds
+) {
     std::string username_full = principal_to_string(ctx, creds.client);
     if (username_full.empty()) {
         std::cerr << "[-] Could not unparse client name" << std::endl;
@@ -331,7 +337,10 @@ std::string KerberosTicketFormatter::formatTicket_TGT(krb5_context ctx, const kr
     return buildASREPHash(username, realm, *etype, checksum_hex, enc_data_hex);
 }
 
-std::string KerberosTicketFormatter::principal_to_string(krb5_context context, krb5_principal principal) {
+std::string KerberosTicketFormatter::principal_to_string(
+    krb5_context context, 
+    krb5_principal principal
+) {
     char* name_buf = nullptr;
     krb5_error_code ret = krb5_unparse_name(context, principal, &name_buf);
 
@@ -347,8 +356,8 @@ std::string KerberosTicketFormatter::principal_to_string(krb5_context context, k
 void KerberosTicketFormatter::split_principal(
     const std::string& full_principal, 
     std::string& name, 
-    std::string& realm) 
-{
+    std::string& realm
+) {
     size_t at_pos = full_principal.find('@');
     if (at_pos == std::string::npos) {
         name = full_principal;
@@ -362,8 +371,8 @@ void KerberosTicketFormatter::split_principal(
 std::optional<KerberosTicketFormatter::CipherLocation> 
 KerberosTicketFormatter::findCipherInTicket(
     const unsigned char* ticket_data,
-    size_t ticket_len) 
-{
+    size_t ticket_len
+) {
     for (size_t i = 0; i < ticket_len - 4; i++) {
         if (ticket_data[i] == 0x04 && (ticket_data[i+1] == 0x82)) {
             size_t len = (ticket_data[i+2] << 8) | ticket_data[i+3];
@@ -382,8 +391,8 @@ KerberosTicketFormatter::findCipherInTicket(
 
 std::optional<krb5_enctype> KerberosTicketFormatter::findEncryptionType(
     const unsigned char* ticket_data,
-    size_t cipher_offset) 
-{
+    size_t cipher_offset
+) {
     size_t search_start = (cipher_offset > 100) ? cipher_offset - 100 : 0;
     
     for (size_t i = cipher_offset - 1; i > search_start; i--) {
@@ -420,10 +429,14 @@ inline size_t KerberosTicketFormatter::getChecksumSize(krb5_enctype etype) {
 
 inline const char* KerberosTicketFormatter::getEncryptionName(krb5_enctype etype) {
     switch (etype) {
-        case 17: return "AES128-CTS-HMAC-SHA1-96";
-        case 18: return "AES256-CTS-HMAC-SHA1-96";
-        case 23: return "RC4-HMAC";
-        default: return "UNKNOWN";
+        case 17: 
+            return "AES128-CTS-HMAC-SHA1-96";
+        case 18: 
+            return "AES256-CTS-HMAC-SHA1-96";
+        case 23: 
+            return "RC4-HMAC";
+        default: 
+            return "UNKNOWN";
     }
 }
 
@@ -441,8 +454,8 @@ std::string KerberosTicketFormatter::buildTGSHash(
     const std::string& serverRealm,
     krb5_enctype etype,
     const std::string& checksumHex,
-    const std::string& encDataHex) 
-{
+    const std::string& encDataHex
+) {
     std::string realm_lower = serverRealm;
     std::transform(realm_lower.begin(), realm_lower.end(), realm_lower.begin(), ::tolower);
     std::string spn_field = realm_lower + "/" + serverName;
@@ -461,8 +474,8 @@ std::string KerberosTicketFormatter::buildASREPHash(
     const std::string& realm,
     krb5_enctype etype,
     const std::string& checksumHex,
-    const std::string& encDataHex) 
-{
+    const std::string& encDataHex
+) {
     std::stringstream ss_hash;
     ss_hash << "$krb5asrep$" << etype << "$"
             << username << "@" << realm << ":"
