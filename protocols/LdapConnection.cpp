@@ -59,17 +59,19 @@ std::string base64_encode(const char* data, size_t len) {
 }
 
 
-LdapConnection::LdapConnection() 
+LdapConnection::LdapConnection(const std::string& host, size_t port) 
     : ldapSession(nullptr)
     , isAuthenticated_(false)
     , isConnected_(false) 
-{}
+{
+    initialize(host, port);
+}
 
 LdapConnection::~LdapConnection() { 
     disconnect(); 
 }
 
-bool LdapConnection::initialize(const std::string& host, unsigned short port) {
+bool LdapConnection::initialize(const std::string& host, size_t port) {
     if (isConnected_) {
         disconnect();
     }

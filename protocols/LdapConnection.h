@@ -33,7 +33,7 @@ typedef struct berval berval;
  */
 class LdapConnection : public LdapQuerier{
 public:
-    LdapConnection();
+    LdapConnection(const std::string& host, size_t port = 389);
     ~LdapConnection();
 
     LdapConnection(const LdapConnection&) = delete;
@@ -45,7 +45,7 @@ public:
      * @param port Porta LDAP (padrão: 389, LDAPS: 636)
      * @return true se conectado com sucesso
      */
-    bool initialize(const std::string& host, unsigned short port = 389);
+    bool initialize(const std::string& host, size_t port = 389);
 
     bool connect();
     

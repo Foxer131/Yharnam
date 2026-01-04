@@ -22,10 +22,9 @@ int main(int argc, char* argv[]) {
 
     try {
         
-        LdapConnection ldap_connection; 
         std::string targetIP = parser.getIP();
-        ldap_connection.initialize(targetIP);
-
+        LdapConnection ldap_connection{ targetIP }; 
+        
         if (!ldap_connection.connect()) {
             std::cerr << Colors::COLOR_RED << "[-] Failed to initialize to LDAP at " << targetIP << Colors::COLOR_RESET << std::endl;
             return 1;
