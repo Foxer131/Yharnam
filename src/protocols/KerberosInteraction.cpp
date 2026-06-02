@@ -443,19 +443,6 @@ inline size_t KerberosTicketFormatter::getChecksumSize(krb5_enctype etype) {
     }
 }
 
-inline const char* KerberosTicketFormatter::getEncryptionName(krb5_enctype etype) {
-    switch (etype) {
-        case ENCTYPE_AES128_CTS_HMAC_SHA1_96:
-            return "AES128-CTS-HMAC-SHA1-96";
-        case ENCTYPE_AES256_CTS_HMAC_SHA1_96:
-            return "AES256-CTS-HMAC-SHA1-96";
-        case ENCTYPE_ARCFOUR_HMAC:
-            return "RC4-HMAC";
-        default:
-            return "UNKNOWN";
-    }
-}
-
 std::string KerberosTicketFormatter::to_hex(const unsigned char* data, size_t len) {
     std::stringstream ss;
     ss << std::hex << std::setfill('0');

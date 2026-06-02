@@ -4,6 +4,7 @@
 #include <sstream>
 #include "utils/Colors.h"
 #include "cli/ArgumentParser.h"
+#include "core/ActiveDirectory.h"
 #include "core/ModuleRegistry.h"
 
 namespace {
@@ -52,7 +53,11 @@ std::vector<std::string>  Attacks::ASREPRoast::listUser(const std::string& baseD
     std::cout << Colors::COLOR_YELLOW << "[*] Enumerating asreproastable users" << Colors::COLOR_RESET << std::endl;
 
     std::vector<std::string> asreproast_user;
-    std::string query = "(&(samAccountType=805306368)(userAccountControl:1.2.840.113556.1.4.803:=4194304))";
+    // Normal user accounts that have "do not require Kerberos pre-auth" set.
+    std::string query =
+        std::string("(&(samAccountType=") + AD::SamAccountType::NormalUser + ")"
+        "(userAccountControl:" + AD::MatchingRuleBitAnd + ":=" +
+        std::to_string(AD::Uac::DontRequirePreauth) + "))";
     std::vector<std::string> attrs = {"sAMAccountName"};
 
     auto results = ldap.executeQueryAndUnpackData(baseDN, query, attrs);

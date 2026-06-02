@@ -8,6 +8,7 @@
 #include "utils/StringUtils.h"
 #include "protocols/AclService.h"
 #include "cli/ArgumentParser.h"
+#include "core/ActiveDirectory.h"
 #include "core/ModuleRegistry.h"
 
 namespace {
@@ -57,24 +58,15 @@ static std::string extractCN(const std::string& dn) {
     return dn.substr(start, end - start);
 }
 
-// userAccountControl bit flags (subset relevant to enumeration).
-namespace UacFlag {
-constexpr int Disabled              = 0x0002;
-constexpr int LockedOut             = 0x0010;
-constexpr int PasswdNotRequired     = 0x0020;
-constexpr int DontExpirePassword    = 0x10000;
-constexpr int TrustedForDelegation  = 0x80000;
-}  // namespace UacFlag
-
 static std::string decodeUAC(const std::string& uacStr) {
     try {
         int uac = std::stoi(uacStr);
         std::string status;
-        if (uac & UacFlag::Disabled)             status += "[DISABLED] ";
-        if (uac & UacFlag::LockedOut)            status += "[LOCKED_OUT] ";
-        if (uac & UacFlag::PasswdNotRequired)    status += "[PASSWD_NOTREQD] ";
-        if (uac & UacFlag::DontExpirePassword)   status += "[DONT_EXPIRE_PASSWD] ";
-        if (uac & UacFlag::TrustedForDelegation) status += "[TRUSTED_FOR_DELEGATION] ";
+        if (uac & AD::Uac::Disabled)             status += "[DISABLED] ";
+        if (uac & AD::Uac::LockedOut)            status += "[LOCKED_OUT] ";
+        if (uac & AD::Uac::PasswdNotRequired)    status += "[PASSWD_NOTREQD] ";
+        if (uac & AD::Uac::DontExpirePassword)   status += "[DONT_EXPIRE_PASSWD] ";
+        if (uac & AD::Uac::TrustedForDelegation) status += "[TRUSTED_FOR_DELEGATION] ";
 
         return status.empty() ? "Normal (Enabled)" : status;
     } catch (...) { return uacStr; }
@@ -195,21 +187,6 @@ void Analysis::Whoami::printAttribute(
 }
 
 std::string Analysis::Whoami::resolvePrimaryGroup(const std::string& rid) const {
-    static const std::map<std::string, std::string> ridMap = {
-        {"512", "Domain Admins"},
-        {"513", "Domain Users"},
-        {"514", "Domain Guests"},
-        {"515", "Domain Computers"},
-        {"516", "Domain Controllers"},
-        {"518", "Schema Admins"},
-        {"519", "Enterprise Admins"},
-        {"520", "Group Policy Creator Owners"}
-    };
-
-    auto it = ridMap.find(rid);
-    if (it != ridMap.end()) {
-        return it->second;
-    }
-    return "RID-" + rid;
+    return AD::primaryGroupName(rid);
 }
 
