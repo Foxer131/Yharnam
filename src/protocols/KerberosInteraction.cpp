@@ -7,6 +7,7 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <iterator>
 #include <vector>
 #include "protocols/KdcClient.h"
 
@@ -278,7 +279,7 @@ std::string KerberosInteraction::requestAndFormatASREP(
         ENCTYPE_AES128_CTS_HMAC_SHA1_96,
         ENCTYPE_ARCFOUR_HMAC,
     };
-    krb5_get_init_creds_opt_set_etype_list(options, etypes, 3);
+    krb5_get_init_creds_opt_set_etype_list(options, etypes, std::size(etypes));
 
     krb5_init_creds_context icc = nullptr;
     krb5_error_code err = krb5_init_creds_init(
@@ -309,7 +310,7 @@ std::string KerberosInteraction::requestAndFormatASREP(
             AsRepEncPart encPart = parseAsRep(reply->data(), reply->size());
             if (encPart.kdcError) {
                 std::cerr << "[-] KDC rejected AS-REQ for " << username
-                          << " (pre-auth required, RC4 disabled, or unknown account)" << std::endl;
+                          << " (pre-auth required, no matching etype, or unknown account)" << std::endl;
             } else if (encPart.ok) {
                 hash = KerberosTicketFormatter::formatASREP(
                     username, upperRealm, encPart.etype, encPart.cipher, encPart.cipherLen);
