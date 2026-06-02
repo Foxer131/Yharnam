@@ -1,12 +1,12 @@
 #include <iostream>
 #include "Attacks.h"
-#include "../../protocols/LdapConnection.h"
-#include "../../protocols/KerberosInteraction.h"
+#include "protocols/LdapConnection.h"
+#include "protocols/KerberosInteraction.h"
 #include <string>
 #include <vector>
-#include "../../utils/Utils.h"
-#include "../../utils/Colors.h"
-#include "../../cli/ArgumentParser.h"
+#include "utils/Utils.h"
+#include "utils/Colors.h"
+#include "cli/ArgumentParser.h"
 
 Attacks::Kerberoast::Kerberoast(LdapQuerier& _ldap, KerberosInteraction& _krb, const std::string& _user, const std::string& _pass)
         : ldap(_ldap), krb(_krb), username(_user), password(_pass) 

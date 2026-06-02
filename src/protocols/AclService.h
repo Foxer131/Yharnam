@@ -62,9 +62,7 @@ private:
     bool isAllowedAceType(uint8_t aceType) const;
     
     std::string sambaSidToString(const struct dom_sid* sid);
-    
-    static std::vector<uint8_t> decodeBase64(const std::string& base64Input);
-    
+
     static void addBasicRights(uint32_t mask, std::vector<std::string>& rights);
     static void addWriteRelatedRights(uint32_t mask, std::vector<std::string>& rights);
     static void addChildManagementRights(uint32_t mask, std::vector<std::string>& rights);

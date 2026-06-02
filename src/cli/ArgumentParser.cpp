@@ -1,11 +1,9 @@
-#include <iostream>
 #include "ArgumentParser.h"
+
 #include <algorithm>
+#include <cctype>
+#include <iostream>
 #include <sstream>
-
-ArgumentParser::ArgumentParser() {}
-
-
 
 void ArgumentParser::transformUserDomain() {
     if (user.username.find("@") != std::string::npos) {
@@ -93,7 +91,7 @@ constexpr unsigned int hash(std::string_view str) {
     return hash;
 } 
 
-bool ArgumentParser::parse(int& argc, char* argv[]) {
+bool ArgumentParser::parse(int argc, char* argv[]) {
     if (argc < 2) {
         printHelp();
         return false;
@@ -115,9 +113,10 @@ bool ArgumentParser::parse(int& argc, char* argv[]) {
                     user.password = argv[++i];
                 break;
             case hash("-dc"): {
-                if (i + 1 < argc) 
+                if (i + 1 < argc) {
                     DC = argv[++i];
-                    transformUserDomain();
+                }
+                transformUserDomain();
                 break;
             }
             case hash("--query"):

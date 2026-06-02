@@ -6,8 +6,8 @@
 #include <set>
 #include <algorithm>
 #include "Analysis.h"
-#include "../../utils/Colors.h"
-#include "../../utils/StringUtils.h"
+#include "utils/Colors.h"
+#include "utils/StringUtils.h"
 
 static const char* getPermissionColor(const std::string& perm) {
     if (perm == "GenericAll" || perm == "WriteDacl" || perm == "WriteOwner" || perm == "FullControl") {

@@ -1,6 +1,6 @@
 #pragma once
-#include "../protocols/LdapConnection.h"
-#include "../cli/ArgumentParser.h"
+#include "protocols/LdapConnection.h"
+#include "cli/ArgumentParser.h"
 #include "Context.h"
 
 class Module {

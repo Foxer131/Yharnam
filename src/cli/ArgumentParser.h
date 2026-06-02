@@ -3,10 +3,10 @@
 #include <string>
 #include <vector>
 
-typedef struct {
+struct User {
     std::string password;
     std::string username;
-} User;
+};
 
 enum class Modules {
     KERBEROAST,
@@ -20,7 +20,7 @@ enum class Modules {
 };
 
 class ArgumentParser {
-    // Genericos
+    // Generic / shared options
     User user;
     std::string DC;
     std::string ip;
@@ -35,23 +35,20 @@ class ArgumentParser {
 
     void transformUserDomain();
 public:
-    ArgumentParser();
-
-
-    User  getUser() const { return user; }
+    User getUser() const { return user; }
     std::string getDC() const { return DC; }
     std::string getIP() const { return ip; }
     Modules getModuleToRun() const { return currentModule; }
     std::string getFilePath() const { return file_path; }
 
     std::string getQuery() const { return query; }
-    std::vector<std::string> getAttributes() { return customAttributes; }
-    
+    std::vector<std::string> getAttributes() const { return customAttributes; }
+
     std::vector<std::string> getCustomTargets() const { return customTargets; }
     bool getScanAll() const { return scanAll; }
 
 
     std::string makeBaseDN() const;
-    bool parse(int& argc, char* argv[]);
+    bool parse(int argc, char* argv[]);
     void printHelp();
 };

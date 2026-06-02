@@ -1,6 +1,7 @@
 #include "KerberosInteraction.h"
 #include <iostream>
 #include <stdexcept>
+#include <cctype>
 #include <cstring>
 #include <sstream>
 #include <iomanip>
@@ -373,7 +374,10 @@ KerberosTicketFormatter::findCipherInTicket(
     const unsigned char* ticket_data,
     size_t ticket_len
 ) {
-    for (size_t i = 0; i < ticket_len - 4; i++) {
+    if (ticket_len < 5) {
+        return std::nullopt;
+    }
+    for (size_t i = 0; i + 4 < ticket_len; i++) {
         if (ticket_data[i] == 0x04 && (ticket_data[i+1] == 0x82)) {
             size_t len = (ticket_data[i+2] << 8) | ticket_data[i+3];
             
@@ -393,8 +397,11 @@ std::optional<krb5_enctype> KerberosTicketFormatter::findEncryptionType(
     const unsigned char* ticket_data,
     size_t cipher_offset
 ) {
+    if (cipher_offset == 0) {
+        return std::nullopt;
+    }
     size_t search_start = (cipher_offset > 100) ? cipher_offset - 100 : 0;
-    
+
     for (size_t i = cipher_offset - 1; i > search_start; i--) {
         if (ticket_data[i] == 0x02 && i + 2 < cipher_offset) {
             size_t int_len = ticket_data[i + 1];

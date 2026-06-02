@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cstring>
 #include <sstream>
+#include "utils/Encoding.h"
 
 extern "C" {
     #include <talloc.h>
@@ -51,8 +52,8 @@ std::vector<uint8_t> AclService::decodeData(const std::string& input) {
     if (input.substr(0, 2) != "::") {
         return std::vector<uint8_t>(input.begin(), input.end());
     }
-    
-    return decodeBase64(input.substr(2));
+
+    return Encoding::base64Decode(input.substr(2));
 }
 
 std::string AclService::sidToString(const std::vector<uint8_t>& bytes) {
@@ -60,19 +61,19 @@ std::string AclService::sidToString(const std::vector<uint8_t>& bytes) {
         return "";
     }
     
-    int revision = bytes[0];
-    int numAuths = bytes[1];
-    
+    const int revision = bytes[0];
+    const size_t numAuths = bytes[1];
+
     uint64_t authority = 0;
     for (size_t i{}; i < 6; i++) {
         authority = (authority << 8) | bytes[2 + i];
     }
-    
+
     std::stringstream ss;
     ss << "S-" << revision << "-" << authority;
-    
+
     for (size_t i{}; i < numAuths; i++) {
-        int offset = 8 + (i * 4);
+        const size_t offset = 8 + (i * 4);
         if (offset + 4 > bytes.size()) {
             break;
         }
@@ -169,41 +170,11 @@ std::string AclService::sambaSidToString(const struct dom_sid* sid) {
     }
     ss << "-" << authority;
 
-    for (size_t i{}; i < sid->num_auths; i++) {
+    for (size_t i{}; i < static_cast<size_t>(sid->num_auths); i++) {
         ss << "-" << sid->sub_auths[i];
     }
     
     return ss.str();
-}
-
-std::vector<uint8_t> AclService::decodeBase64(const std::string& base64Input) {
-    static const std::string base64_chars = 
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    
-    std::vector<int> decodingTable(256, -1);
-    for (size_t i = 0; i < 64; i++) {
-        decodingTable[static_cast<unsigned char>(base64_chars[i])] = i;
-    }
-    
-    std::string decoded;
-    int val = 0;
-    int valb = -8;
-    
-    for (unsigned char c : base64Input) {
-        if (decodingTable[c] == -1) {
-            break;
-        }
-
-        val = (val << 6) + decodingTable[c];
-        valb += 6;
-        
-        if (valb >= 0) {
-            decoded.push_back(static_cast<char>((val >> valb) & 0xFF));
-            valb -= 8;
-        }
-    }
-    
-    return std::vector<uint8_t>(decoded.begin(), decoded.end());
 }
 
 void AclService::addBasicRights(uint32_t mask, std::vector<std::string>& rights) {

@@ -2,7 +2,7 @@
 #include <algorithm>
 #include "Attacks.h"
 #include <sstream>
-#include "../../utils/Colors.h"
+#include "utils/Colors.h"
 
 Attacks::ASREPRoast::ASREPRoast(LdapQuerier& ldap_) : ldap(ldap_) {}
 

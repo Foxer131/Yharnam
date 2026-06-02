@@ -3,63 +3,9 @@
 #include <ldap.h>
 #include <map>
 #include <cstring>
+#include "utils/Encoding.h"
 
-inline bool is_printable(const char* data, size_t len) {
-    for (size_t i = 0; i < len; ++i) {
-        if (!isprint(static_cast<unsigned char>(data[i]))) {
-            return false;
-        }
-    }
-    return true;
-}
-
-std::string base64_encode(const char* data, size_t len) {
-    static const std::string base64_chars =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz"
-        "0123456789+/";
-    
-    std::string ret;
-    ret.reserve(((len + 2) / 3) * 4);
-    
-    int i = 0;
-    int j = 0;
-    unsigned char char_array_3[3];
-    unsigned char char_array_4[4];
-
-    while (len--) {
-        char_array_3[i++] = *(data++);
-        if (i == 3) {
-            char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-            char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
-            char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
-            char_array_4[3] = char_array_3[2] & 0x3f;
-
-            for (i = 0; i < 4; i++)
-                ret += base64_chars[char_array_4[i]];
-            i = 0;
-        }
-    }
-
-    if (i) {
-        for (j = i; j < 3; j++)
-            char_array_3[j] = '\0';
-
-        char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-        char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
-        char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
-
-        for (j = 0; j < i + 1; j++)
-            ret += base64_chars[char_array_4[j]];
-
-        while (i++ < 3)
-            ret += '=';
-    }
-    return ret;
-}
-
-
-LdapConnection::LdapConnection(const std::string& host, size_t port) 
+LdapConnection::LdapConnection(const std::string& host, size_t port)
     : ldapSession(nullptr)
     , isAuthenticated_(false)
     , isConnected_(false) 
@@ -418,11 +364,11 @@ inline std::string LdapConnection::encodeAttributeValue(berval* value) const {
     const char* data = value->bv_val;
     size_t length = value->bv_len;
     
-    if (is_printable(data, length)) {
+    if (Encoding::isPrintable(data, length)) {
         return std::string(data, length);
     }
-    
-    return "::" + base64_encode(data, length);
+
+    return "::" + Encoding::base64Encode(data, length);
 }
 
 inline void LdapConnection::handleSearchError(int returnCode, const LDAPResult& results) const {

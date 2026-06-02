@@ -1,0 +1,20 @@
+# Build output
+/build/
+/out/
+*.o
+*.obj
+
+# Binaries
+/Yharnam
+Yharnam
+
+# Attack artifacts / loot
+*.kirbi
+*.ccache
+hashes.txt
+
+# Editor / OS
+.cache/
+compile_commands.json
+*.swp
+.DS_Store

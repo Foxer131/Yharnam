@@ -1,6 +1,6 @@
 #include "ModuleGenerator.h"
-#include "../modules/attacks/Attacks.h"
-#include "../modules/analysis/Analysis.h"
+#include "modules/attacks/Attacks.h"
+#include "modules/analysis/Analysis.h"
 #include "Context.h"
 #include <memory>
 

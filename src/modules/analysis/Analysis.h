@@ -3,9 +3,9 @@
 #include <string>
 #include <set>
 #include <map>
-#include "../../core/Module.h"       
-#include "../../protocols/LdapQuerier.h" 
-#include "../../protocols/AclService.h"
+#include "core/Module.h"       
+#include "protocols/LdapQuerier.h" 
+#include "protocols/AclService.h"
 
 namespace Analysis {
     
@@ -59,9 +59,9 @@ namespace Analysis {
     private:
         LdapQuerier& ldap;
         AclService& acl;
-            
-        bool scanAll;
+
         std::string myUsername;
+        bool scanAll;
         std::vector<std::string> targets;
             
         std::set<std::string> mySids;

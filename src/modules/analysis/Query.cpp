@@ -1,6 +1,6 @@
 #include "Analysis.h"
-#include "../../utils/Colors.h"
-#include "../../protocols/LdapQuerier.h"
+#include "utils/Colors.h"
+#include "protocols/LdapQuerier.h"
 #include <iostream>
 #include <iomanip>
 

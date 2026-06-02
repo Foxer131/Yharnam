@@ -4,9 +4,9 @@
 #include <string>
 #include <algorithm>
 #include "Analysis.h"
-#include "../../utils/Colors.h"
-#include "../../utils/StringUtils.h"
-#include "../../protocols/AclService.h"
+#include "utils/Colors.h"
+#include "utils/StringUtils.h"
+#include "protocols/AclService.h"
 
 static std::string filetimeToString(const std::string& filetimeStr) {
     try {

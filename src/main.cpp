@@ -1,7 +1,5 @@
 #include <iostream>
-#include <vector>
 #include <string>
-#include <ldap.h>
 #include "protocols/LdapConnection.h"
 #include "protocols/KerberosInteraction.h"
 #include "protocols/AclService.h"

@@ -1,9 +1,9 @@
 #pragma once
-#include "../../core/Module.h"
-#include "../../protocols/LdapConnection.h"
-#include "../../cli/ArgumentParser.h"
-#include "../../protocols/KerberosInteraction.h"
-#include "../../core/Context.h"
+#include "core/Module.h"
+#include "protocols/LdapConnection.h"
+#include "cli/ArgumentParser.h"
+#include "protocols/KerberosInteraction.h"
+#include "core/Context.h"
 
 namespace Attacks {
     class Kerberoast : public Module {
