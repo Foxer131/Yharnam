@@ -3,7 +3,7 @@
 #include <ldap.h>
 #include <map>
 #include <cstring>
-#include "utils/Encoding.h"
+#include "protocols/LdapResultParser.h"
 
 LdapConnection::LdapConnection(const std::string& host, size_t port)
     : ldapSession(nullptr)
@@ -56,7 +56,7 @@ bool LdapConnection::connect() {
         nullptr,            
         &res               
     );
-    LDAPResult result = processSearchResults(res);
+    LDAPResult result = LdapResultParser::parse(ldapSession, res);
 
     cleanupSearchResources(res);
     
@@ -147,11 +147,11 @@ LDAPResult LdapConnection::performSpecifiedScopeSearch(
         &res
     );
     
-    LDAPResult results = processSearchResults(res);
-    
+    LDAPResult results = LdapResultParser::parse(ldapSession, res);
+
     handleSearchError(returnCode, results);
     cleanupSearchResources(res);
-    
+
     return results;
 }
 
@@ -300,76 +300,6 @@ int LdapConnection::executeLdapSearch(
     );
 }
 
-
-LDAPResult LdapConnection::processSearchResults(LDAPMessage* result) {
-    LDAPResult results;
-    
-    // Validação adicional de segurança
-    if (result == nullptr || ldapSession == nullptr) {
-        return results;
-    }
-
-    for (LDAPMessage* entry = ldap_first_entry(ldapSession, result); 
-         entry != nullptr; 
-         entry = ldap_next_entry(ldapSession, entry)) 
-    {
-        auto entryData = processEntry(entry);
-        results.push_back(entryData);
-    }
-    
-    return results;
-}
-
-SingleLDAPResult LdapConnection::processEntry(LDAPMessage* entry) {
-    SingleLDAPResult entryData;
-    BerElement* ber = nullptr;
-    
-    for (char* attrName = ldap_first_attribute(ldapSession, entry, &ber);
-         attrName != nullptr;
-         attrName = ldap_next_attribute(ldapSession, entry, ber)) 
-    {
-        auto attrValues = extractAttributeValues(entry, attrName);
-        entryData[attrName] = attrValues;
-        ldap_memfree(attrName);
-    }
-    
-    if (ber != nullptr) {
-        ber_free(ber, 0);
-    }
-    
-    return entryData;
-}
-
-std::vector<std::string> LdapConnection::extractAttributeValues(
-    LDAPMessage* entry, 
-    const char* attributeName) 
-{
-    std::vector<std::string> values;
-    berval** rawValues = ldap_get_values_len(ldapSession, entry, attributeName);
-    
-    if (rawValues == nullptr) {
-        return values;
-    }
-    
-    for (size_t i{}; rawValues[i] != nullptr; i++) {
-        std::string encodedValue = encodeAttributeValue(rawValues[i]);
-        values.push_back(encodedValue);
-    }
-    
-    ldap_value_free_len(rawValues);
-    return values;
-}
-
-inline std::string LdapConnection::encodeAttributeValue(berval* value) const {
-    const char* data = value->bv_val;
-    size_t length = value->bv_len;
-    
-    if (Encoding::isPrintable(data, length)) {
-        return std::string(data, length);
-    }
-
-    return "::" + Encoding::base64Encode(data, length);
-}
 
 inline void LdapConnection::handleSearchError(int returnCode, const LDAPResult& results) const {
     if (returnCode != LDAP_SUCCESS && results.empty()) {

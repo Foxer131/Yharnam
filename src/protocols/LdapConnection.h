@@ -150,12 +150,6 @@ private:
         LDAPMessage** result
     );
 
-    LDAPResult processSearchResults(LDAPMessage* result);
-    SingleLDAPResult processEntry(LDAPMessage* entry);
-    std::vector<std::string> extractAttributeValues(LDAPMessage* entry, const char* attributeName);
-    std::string encodeAttributeValue(berval* value) const;
-
-
     void handleSearchError(int returnCode, const LDAPResult& results) const;
     void cleanupSearchResources(LDAPMessage* result) const;
 };
