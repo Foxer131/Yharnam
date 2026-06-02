@@ -9,6 +9,7 @@
 #include "utils/Colors.h"
 #include "utils/StringUtils.h"
 #include "cli/ArgumentParser.h"
+#include "core/ActiveDirectory.h"
 #include "core/ModuleRegistry.h"
 
 namespace {
@@ -166,14 +167,11 @@ bool Analysis::FindAcls::shouldSkipAce(const Security::Ace& ace) const {
 }
 
 inline bool Analysis::FindAcls::isSystemAccount(const std::string& sid) const {
-    return (sid == "S-1-5-18" ||  // SYSTEM
-            sid == "S-1-5-10" ||  // SELF
-            sid == "S-1-3-0");    // CREATOR OWNER
+    return AD::isSystemPrincipal(sid);
 }
 
 inline bool Analysis::FindAcls::isWellKnownPublicSid(const std::string& sid) const {
-    return (sid == "S-1-1-0" ||   // Everyone
-            sid == "S-1-5-11");   // Authenticated Users
+    return AD::isPublicPrincipal(sid);
 }
 
 bool Analysis::FindAcls::isNoisePermission(
@@ -232,18 +230,7 @@ inline std::string Analysis::FindAcls::resolveNotKnownSid(
 }
 
 std::string Analysis::FindAcls::resolveWellKnownSid(const std::string& sidStr) const {
-    if (sidStr == "S-1-5-11") 
-        return "Authenticated Users";
-    if (sidStr == "S-1-1-0") 
-        return "Everyone";
-    if (sidStr.find("-512") != std::string::npos && sidStr.length() < 45) 
-        return "Domain Admins";
-    if (sidStr.find("-519") != std::string::npos) 
-        return "Enterprise Admins";
-    if (sidStr.find("-544") != std::string::npos) 
-        return "Administrators";
-    
-    return "";
+    return AD::wellKnownPrincipal(sidStr);
 }
 
 inline std::string Analysis::FindAcls::buildUserEnumerationQuery() const {
@@ -332,8 +319,8 @@ void Analysis::FindAcls::addUserGroupSids(const SingleLDAPResult& userEntry) {
 }
 
 inline void Analysis::FindAcls::addWellKnownSids() {
-    mySids.insert("S-1-1-0");   // Everyone
-    mySids.insert("S-1-5-11");  // Authenticated Users
+    mySids.insert(AD::Sid::Everyone);
+    mySids.insert(AD::Sid::AuthenticatedUsers);
 }
 
 void Analysis::FindAcls::displayTargetAcls(

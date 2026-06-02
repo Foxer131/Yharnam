@@ -68,7 +68,6 @@ private:
     );
     
     static size_t getChecksumSize(krb5_enctype etype);
-    static const char* getEncryptionName(krb5_enctype etype);
 
     static std::string to_hex(const unsigned char* data, size_t len);
     
