@@ -14,12 +14,12 @@ const ModuleRegistry::Registrar registrar(
     });
 }  // namespace
 
-Analysis::Query::Query(LdapQuerier& _ldap, 
-    const std::string& _query, 
-    const std::vector<std::string>& _attrs)
-    : ldap(_ldap), 
-    queryFilter(_query), 
-    attributesToFetch(_attrs) 
+Analysis::Query::Query(LdapQuerier& ldap_,
+    const std::string& query_,
+    const std::vector<std::string>& attrs_)
+    : ldap(ldap_),
+    queryFilter(query_),
+    attributesToFetch(attrs_)
 {}
 
 void Analysis::Query::run(const ModuleRuntimeContext& ctx) {

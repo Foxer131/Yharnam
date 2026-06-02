@@ -17,10 +17,10 @@ namespace Attacks {
             std::pair<std::string, std::string> requestTicket(const std::string& spn);
     
         public:
-            Kerberoast(LdapQuerier& _ldap, 
-                        KerberosInteraction& _krb, 
-                        const std::string& user, 
-                        const std::string& pass
+            Kerberoast(LdapQuerier& ldap_,
+                        KerberosInteraction& krb_,
+                        const std::string& user_,
+                        const std::string& pass_
                     );
             std::string getName() const override { return "Kerberoast"; }
             void run(const ModuleRuntimeContext& ctx) override;

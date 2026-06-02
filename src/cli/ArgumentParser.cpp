@@ -131,7 +131,7 @@ bool ArgumentParser::parse(int argc, char* argv[]) {
                     std::string rawAttrs = argv[++i];
                     std::stringstream ss(rawAttrs);
                     std::string segment;
-                    // Split por vírgula
+                    // Split on commas
                     while(std::getline(ss, segment, ',')) {
                         customAttributes.push_back(segment);
                     }

@@ -12,15 +12,15 @@ typedef struct berval berval;
 
 /**
  * @class LdapConnection
- * @brief Classe para gerenciamento de conexões LDAP/AD
- * 
- * Esta classe fornece uma interface limpa para conectar, autenticar e 
- * realizar buscas em servidores LDAP/Active Directory.
- * 
- * Uso típico:
+ * @brief Manages an LDAP/Active Directory connection.
+ *
+ * Provides a small interface to connect, authenticate and search against
+ * LDAP/Active Directory servers.
+ *
+ * Typical use:
  * @code
- *   LdapConnection ldap;
- *   if (ldap.initialize("192.168.1.1", 389)) {
+ *   LdapConnection ldap{"192.168.1.1", 389};
+ *   if (ldap.connect()) {
  *       if (ldap.login("CN=user,DC=domain,DC=com", "password")) {
  *           auto results = ldap.executeQueryAndUnpackData(
  *               "DC=domain,DC=com",
@@ -40,78 +40,80 @@ public:
     LdapConnection& operator=(const LdapConnection&) = delete;
 
     /**
-     * @brief Conecta ao servidor LDAP
-     * @param host Endereço do servidor (IP ou hostname)
-     * @param port Porta LDAP (padrão: 389, LDAPS: 636)
-     * @return true se conectado com sucesso
+     * @brief Initializes the LDAP session (does not contact the server yet).
+     * @param host Server address (IP or hostname)
+     * @param port LDAP port (default: 389, LDAPS: 636)
+     * @return true on success
      */
     bool initialize(const std::string& host, size_t port = 389);
 
-    bool connect();
-    
     /**
-     * @brief Desconecta do servidor LDAP
+     * @brief Performs the anonymous root-DSE probe that establishes the session.
+     * @return true once the server is reachable
+     */
+    bool connect();
+
+    /**
+     * @brief Closes the LDAP session.
      */
     void disconnect();
-    
+
     /**
-     * @brief Autentica no servidor LDAP
-     * @param username DN completo do usuário (ex: "CN=user,DC=domain,DC=com")
-     * @param password Senha do usuário
-     * @return true se autenticado com sucesso
+     * @brief Authenticates against the server (simple bind).
+     * @param username Full user DN or UPN (e.g. "CN=user,DC=domain,DC=com")
+     * @param password User password
+     * @return true on successful authentication
      */
     bool login(const std::string& username, const std::string& password);
 
     /**
-     * @brief Executa busca com escopo BASE (apenas o objeto especificado)
-     * @param baseDN Distinguished Name do objeto base
-     * @param query Filtro LDAP (ex: "(objectClass=*)")
-     * @param attributes Lista de atributos a retornar
-     * @return Resultados da busca
+     * @brief BASE-scope search (the base object only).
+     * @param baseDN Distinguished Name of the base object
+     * @param query LDAP filter (e.g. "(objectClass=*)")
+     * @param attributes Attributes to return
+     * @return Search results
      */
     LDAPResult executeBaseScopeQueryAndUnpackData(
-        const std::string& baseDN, 
-        const std::string& query, 
+        const std::string& baseDN,
+        const std::string& query,
         const std::vector<std::string>& attributes
     ) override;
 
     /**
-     * @brief Executa busca com escopo SUBTREE (objeto e todos descendentes)
-     * @param baseDN Distinguished Name do objeto base
-     * @param query Filtro LDAP (ex: "(objectClass=user)")
-     * @param attributes Lista de atributos a retornar
-     * @return Resultados da busca
+     * @brief SUBTREE-scope search (the base object and all descendants).
+     * @param baseDN Distinguished Name of the base object
+     * @param query LDAP filter (e.g. "(objectClass=user)")
+     * @param attributes Attributes to return
+     * @return Search results
      */
     LDAPResult executeQueryAndUnpackData(
-        const std::string& baseDN, 
-        const std::string& query, 
+        const std::string& baseDN,
+        const std::string& query,
         const std::vector<std::string>& attributes
     ) override;
 
     /**
-     * @brief Executa busca com escopo especificado
-     * @param baseDN Distinguished Name do objeto base
-     * @param scope Escopo LDAP (LDAP_SCOPE_BASE, LDAP_SCOPE_ONELEVEL, LDAP_SCOPE_SUBTREE)
-     * @param query Filtro LDAP
-     * @param attributes Lista de atributos a retornar
-     * @return Resultados da busca
+     * @brief Search with an explicit scope.
+     * @param baseDN Distinguished Name of the base object
+     * @param scope LDAP scope (LDAP_SCOPE_BASE, LDAP_SCOPE_ONELEVEL, LDAP_SCOPE_SUBTREE)
+     * @param query LDAP filter
+     * @param attributes Attributes to return
+     * @return Search results
      */
     LDAPResult performSpecifiedScopeSearch(
-        const std::string& baseDN, 
-        int scope, 
-        const std::string& query, 
+        const std::string& baseDN,
+        int scope,
+        const std::string& query,
         const std::vector<std::string>& attributes
     );
 
     /**
-     * @brief Verifica se está autenticado
-     * @return true se autenticado
+     * @brief Whether a successful bind has happened.
      */
     bool isAuthenticated() const;
-    
+
     /**
-     * @brief Verifica se está conectado
-     * @return true se conectado
+     * @brief Whether the session is established.
      */
     bool isConnected() const;
 

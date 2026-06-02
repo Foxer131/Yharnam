@@ -18,9 +18,9 @@ namespace Analysis {
         void displayResults(const LDAPResult& result);
 
     public:
-        Query(LdapQuerier& _ldap, 
-                const std::string& _query, 
-                const std::vector<std::string>& _attrs
+        Query(LdapQuerier& ldap_,
+                const std::string& query_,
+                const std::vector<std::string>& attrs_
             );
 
         std::string getName() const override { return "Custom LDAP Query"; }
@@ -50,7 +50,7 @@ namespace Analysis {
         std::string resolvePrimaryGroup(const std::string& rid) const;
 
     public:
-        Whoami(LdapQuerier& _ldap, const std::string& _username);
+        Whoami(LdapQuerier& ldap_, const std::string& username_);
 
         std::string getName() const override { return "Whoami"; }
         void run(const ModuleRuntimeContext& ctx) override;

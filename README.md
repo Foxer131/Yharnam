@@ -85,11 +85,22 @@ include chains.
 
 ## Adding a new module
 
+Modules self-register, so the factory never needs editing:
+
 1. Declare the class in the relevant header (`modules/attacks/Attacks.h` or
    `modules/analysis/Analysis.h`), deriving from `Module` and implementing
    `getName()` and `run(const ModuleRuntimeContext&)`.
-2. Implement it in a new `.cpp` under `modules/`.
+2. Implement it in a new `.cpp` under `modules/`, and register it there:
+   ```cpp
+   #include "core/ModuleRegistry.h"
+   namespace {
+   const ModuleRegistry::Registrar registrar(
+       Modules::MY_MODULE,
+       [](const ModuleFactoryContext& ctx) -> std::unique_ptr<Module> {
+           return std::make_unique<MyModule>(ctx.ldapService /* , ... */);
+       });
+   }  // namespace
+   ```
 3. Add a value to the `Modules` enum in `cli/ArgumentParser.h` and parse its
    flag in `ArgumentParser::parse`.
-4. Add a `case` to `ModuleFactory::createModule` in `core/ModuleGenerator.cpp`.
-5. Add the new source file to `YHARNAM_SOURCES` in `CMakeLists.txt`.
+4. Add the new source file to `YHARNAM_SOURCES` in `CMakeLists.txt`.

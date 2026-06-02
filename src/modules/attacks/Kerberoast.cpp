@@ -18,8 +18,8 @@ const ModuleRegistry::Registrar registrar(
     });
 }  // namespace
 
-Attacks::Kerberoast::Kerberoast(LdapQuerier& _ldap, KerberosInteraction& _krb, const std::string& _user, const std::string& _pass)
-        : ldap(_ldap), krb(_krb), username(_user), password(_pass) 
+Attacks::Kerberoast::Kerberoast(LdapQuerier& ldap_, KerberosInteraction& krb_, const std::string& user_, const std::string& pass_)
+        : ldap(ldap_), krb(krb_), username(user_), password(pass_)
     {
         krb.requestAndCacheTGT(username, password);
     }
@@ -44,8 +44,8 @@ std::vector<std::string> Attacks::Kerberoast::listUser(const std::string& baseDN
             }
             std::cout << "  [+] User: " << Colors::COLOR_YELLOW << username << Colors::COLOR_RESET << std::endl;
             if (spn != userObject.end()) {
-                for (const auto& _spn : spn->second) {
-                    kerberoastable_users_spns.push_back(_spn); 
+                for (const auto& spnValue : spn->second) {
+                    kerberoastable_users_spns.push_back(spnValue);
                 }
             }
         }

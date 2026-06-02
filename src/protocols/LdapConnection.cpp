@@ -160,10 +160,10 @@ void LdapConnection::setupSecurityDescriptorAttributes(
     LDAPControl* server_ctrls[]
 ) {
 
-    // Sequência BER codificada manualmente para o valor inteiro 7.
-    // Estrutura: SEQUENCE (0x30) de tam 3, contendo INTEGER (0x02) de tam 1, com valor 0x07.
-    // O valor 7 (OWNER|GROUP|DACL) instrui o servidor a retornar o Security Descriptor 
-    // sem a SACL (informações de auditoria), o que requer privilégios elevados
+    // Hand-encoded BER for the integer value 7.
+    // Structure: SEQUENCE (0x30) of length 3, holding INTEGER (0x02) of length 1, value 0x07.
+    // Value 7 (OWNER|GROUP|DACL) asks the server to return the Security Descriptor
+    // without the SACL (audit info), which would otherwise require elevated privileges.
     static char ber_val[] = { 0x30, 0x03, 0x02, 0x01, 0x07 };
     static struct berval bval = { 5, ber_val };
     sd_control.ldctl_oid = (char*)"1.2.840.113556.1.4.801";
@@ -205,7 +205,7 @@ bool LdapConnection::configureLdapOptions() {
     
     if (!setNetworkTimeout()) {
         std::cerr << "Warning: Could not set network timeout" << std::endl;
-        // Não falha a conexão, apenas avisa
+        // Non-fatal: warn but keep the connection
     }
     
     disableReferralChasing();
@@ -225,7 +225,7 @@ bool LdapConnection::setProtocolVersion() {
 }
 
 bool LdapConnection::setNetworkTimeout() {
-    // Timeout de 30 segundos para operações de rede
+    // 30-second timeout for network operations
     struct timeval timeout;
     timeout.tv_sec = 30;
     timeout.tv_usec = 0;

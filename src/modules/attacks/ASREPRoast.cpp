@@ -22,24 +22,23 @@ std::string Attacks::ASREPRoast::extractDomainFromDN(const std::string& baseDN) 
     std::istringstream tokenStream(baseDN);
     bool first = true;
 
-    // Quebra a string por vírgulas
+    // Split the DN on commas
     while (std::getline(tokenStream, token, ',')) {
-        // 1. Remove espaços em branco extras do início da parte (trim left)
+        // 1. Trim leading whitespace from this component
         size_t firstChar = token.find_first_not_of(' ');
         if (firstChar != std::string::npos) {
             token = token.substr(firstChar);
         }
 
-        // 2. Verifica se a parte começa com "DC=" (Domain Component)
-        // Vamos checar "DC=" e "dc=" para garantir
-        if (token.size() > 3 && 
+        // 2. Keep only Domain Components; accept both "DC=" and "dc="
+        if (token.size() > 3 &&
            (token.substr(0, 3) == "DC=" || token.substr(0, 3) == "dc=")) {
-            
+
             if (!first) {
                 domain += ".";
             }
-            
-            // Pega o resto da string após o "DC="
+
+            // Append everything after the "DC=" prefix
             domain += token.substr(3);
             first = false;
         }
