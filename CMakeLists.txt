@@ -19,6 +19,7 @@ set(YHARNAM_SOURCES
     src/core/ModuleRegistry.cpp
     src/protocols/LdapConnection.cpp
     src/protocols/LdapResultParser.cpp
+    src/protocols/KdcClient.cpp
     src/protocols/KerberosInteraction.cpp
     src/protocols/AclService.cpp
     src/modules/attacks/Kerberoast.cpp

