@@ -7,6 +7,16 @@
 #include "utils/Colors.h"
 #include "utils/StringUtils.h"
 #include "protocols/AclService.h"
+#include "cli/ArgumentParser.h"
+#include "core/ModuleRegistry.h"
+
+namespace {
+const ModuleRegistry::Registrar registrar(
+    Modules::WHOAMI,
+    [](const ModuleFactoryContext& ctx) -> std::unique_ptr<Module> {
+        return std::make_unique<Analysis::Whoami>(ctx.ldapService, ctx.user.username);
+    });
+}  // namespace
 
 // Windows FILETIME counts 100-nanosecond ticks since 1601-01-01 UTC.
 namespace {

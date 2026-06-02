@@ -1,44 +1,10 @@
 #include "ModuleGenerator.h"
-#include "modules/attacks/Attacks.h"
-#include "modules/analysis/Analysis.h"
-#include "Context.h"
-#include <memory>
 
+#include "core/ModuleRegistry.h"
 
+// Thin facade over ModuleRegistry. Module factories are registered by each
+// module's own translation unit (see the Registrar in every module .cpp), so
+// this function never needs to change when a module is added.
 std::unique_ptr<Module> ModuleFactory::createModule(const ModuleFactoryContext& ctx) {
-    switch( ctx.moduleToRun) {
-        case Modules::KERBEROAST:
-            return std::make_unique<Attacks::Kerberoast>(
-                ctx.ldapService,
-                ctx.krbService,
-                ctx.user.username,
-                ctx.user.password
-            );
-        case Modules::ASREPROAST:
-            return std::make_unique<Attacks::ASREPRoast>(
-                ctx.ldapService
-            );
-        case Modules::QUERY:
-            return std::make_unique<Analysis::Query>(
-                ctx.ldapService,
-                ctx.query,
-                ctx.attrs
-            );
-        case Modules::WHOAMI:
-            return std::make_unique<Analysis::Whoami>(
-                ctx.ldapService,
-                ctx.user.username
-            );
-        case Modules::FINDACLS:
-            return std::make_unique<Analysis::FindAcls>(
-                ctx.ldapService,
-                ctx.aclService,
-                ctx.user.username,
-                ctx.customTargets,
-                ctx.scanAll
-            );
-        case Modules::NONE:
-        default:
-            return nullptr;
-    }
+    return ModuleRegistry::instance().create(ctx);
 }

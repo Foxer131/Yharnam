@@ -1,8 +1,18 @@
 #include "Analysis.h"
 #include "utils/Colors.h"
 #include "protocols/LdapQuerier.h"
+#include "cli/ArgumentParser.h"
+#include "core/ModuleRegistry.h"
 #include <iostream>
 #include <iomanip>
+
+namespace {
+const ModuleRegistry::Registrar registrar(
+    Modules::QUERY,
+    [](const ModuleFactoryContext& ctx) -> std::unique_ptr<Module> {
+        return std::make_unique<Analysis::Query>(ctx.ldapService, ctx.query, ctx.attrs);
+    });
+}  // namespace
 
 Analysis::Query::Query(LdapQuerier& _ldap, 
     const std::string& _query, 

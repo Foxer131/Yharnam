@@ -8,6 +8,17 @@
 #include "Analysis.h"
 #include "utils/Colors.h"
 #include "utils/StringUtils.h"
+#include "cli/ArgumentParser.h"
+#include "core/ModuleRegistry.h"
+
+namespace {
+const ModuleRegistry::Registrar registrar(
+    Modules::FINDACLS,
+    [](const ModuleFactoryContext& ctx) -> std::unique_ptr<Module> {
+        return std::make_unique<Analysis::FindAcls>(
+            ctx.ldapService, ctx.aclService, ctx.user.username, ctx.customTargets, ctx.scanAll);
+    });
+}  // namespace
 
 static const char* getPermissionColor(const std::string& perm) {
     if (perm == "GenericAll" || perm == "WriteDacl" || perm == "WriteOwner" || perm == "FullControl") {

@@ -3,6 +3,16 @@
 #include "Attacks.h"
 #include <sstream>
 #include "utils/Colors.h"
+#include "cli/ArgumentParser.h"
+#include "core/ModuleRegistry.h"
+
+namespace {
+const ModuleRegistry::Registrar registrar(
+    Modules::ASREPROAST,
+    [](const ModuleFactoryContext& ctx) -> std::unique_ptr<Module> {
+        return std::make_unique<Attacks::ASREPRoast>(ctx.ldapService);
+    });
+}  // namespace
 
 Attacks::ASREPRoast::ASREPRoast(LdapQuerier& ldap_) : ldap(ldap_) {}
 
