@@ -7,6 +7,15 @@
 #include <iomanip>
 #include <algorithm>
 
+namespace {
+// Encryption types Yharnam can extract a crackable hash for.
+constexpr bool isSupportedEnctype(krb5_enctype etype) {
+    return etype == ENCTYPE_AES128_CTS_HMAC_SHA1_96 ||
+           etype == ENCTYPE_AES256_CTS_HMAC_SHA1_96 ||
+           etype == ENCTYPE_ARCFOUR_HMAC;
+}
+}  // namespace
+
 KerberosInteraction::KerberosInteraction() {
     krb5_context ctx = nullptr;
     krb5_error_code err = krb5_init_context(&ctx);
@@ -408,12 +417,12 @@ std::optional<krb5_enctype> KerberosTicketFormatter::findEncryptionType(
             
             if (int_len == 1) {
                 krb5_enctype potential_etype = ticket_data[i + 2];
-                if (potential_etype == 17 || potential_etype == 18 || potential_etype == 23) {
+                if (isSupportedEnctype(potential_etype)) {
                     return potential_etype;
                 }
             } else if (int_len == 2 && i + 3 < cipher_offset) {
                 krb5_enctype potential_etype = (ticket_data[i + 2] << 8) | ticket_data[i + 3];
-                if (potential_etype == 17 || potential_etype == 18 || potential_etype == 23) {
+                if (isSupportedEnctype(potential_etype)) {
                     return potential_etype;
                 }
             }
@@ -424,10 +433,10 @@ std::optional<krb5_enctype> KerberosTicketFormatter::findEncryptionType(
 
 inline size_t KerberosTicketFormatter::getChecksumSize(krb5_enctype etype) {
     switch (etype) {
-        case 17:  // AES128
-        case 18:  // AES256
+        case ENCTYPE_AES128_CTS_HMAC_SHA1_96:
+        case ENCTYPE_AES256_CTS_HMAC_SHA1_96:
             return 12;
-        case 23:  // RC4-HMAC
+        case ENCTYPE_ARCFOUR_HMAC:  // RC4-HMAC
             return 16;
         default:
             return 0;
@@ -436,13 +445,13 @@ inline size_t KerberosTicketFormatter::getChecksumSize(krb5_enctype etype) {
 
 inline const char* KerberosTicketFormatter::getEncryptionName(krb5_enctype etype) {
     switch (etype) {
-        case 17: 
+        case ENCTYPE_AES128_CTS_HMAC_SHA1_96:
             return "AES128-CTS-HMAC-SHA1-96";
-        case 18: 
+        case ENCTYPE_AES256_CTS_HMAC_SHA1_96:
             return "AES256-CTS-HMAC-SHA1-96";
-        case 23: 
+        case ENCTYPE_ARCFOUR_HMAC:
             return "RC4-HMAC";
-        default: 
+        default:
             return "UNKNOWN";
     }
 }

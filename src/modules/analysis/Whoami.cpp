@@ -8,21 +8,28 @@
 #include "utils/StringUtils.h"
 #include "protocols/AclService.h"
 
+// Windows FILETIME counts 100-nanosecond ticks since 1601-01-01 UTC.
+namespace {
+constexpr unsigned long long kFiletimeTicksPerSecond = 10000000ULL;
+constexpr unsigned long long kFiletimeToUnixEpochSeconds = 11644473600ULL;
+constexpr unsigned long long kFiletimeNever = 9223372036854775807ULL;  // INT64_MAX
+}  // namespace
+
 static std::string filetimeToString(const std::string& filetimeStr) {
     try {
         unsigned long long filetime = std::stoull(filetimeStr);
 
-        if (filetime == 0 || filetime == 9223372036854775807) 
+        if (filetime == 0 || filetime == kFiletimeNever)
             return "Never";
-        time_t unixTime = (filetime / 10000000ULL) - 11644473600ULL;
-        
+        time_t unixTime = (filetime / kFiletimeTicksPerSecond) - kFiletimeToUnixEpochSeconds;
+
         char buffer[80];
         struct tm* timeinfo = localtime(&unixTime);
         strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
-        
+
         return std::string(buffer);
-    } catch (...) { 
-        return "Invalid Date"; 
+    } catch (...) {
+        return "Invalid Date";
     }
 }
 
@@ -40,16 +47,25 @@ static std::string extractCN(const std::string& dn) {
     return dn.substr(start, end - start);
 }
 
+// userAccountControl bit flags (subset relevant to enumeration).
+namespace UacFlag {
+constexpr int Disabled              = 0x0002;
+constexpr int LockedOut             = 0x0010;
+constexpr int PasswdNotRequired     = 0x0020;
+constexpr int DontExpirePassword    = 0x10000;
+constexpr int TrustedForDelegation  = 0x80000;
+}  // namespace UacFlag
+
 static std::string decodeUAC(const std::string& uacStr) {
     try {
         int uac = std::stoi(uacStr);
         std::string status;
-        if (uac & 0x0002) status += "[DISABLED] ";
-        if (uac & 0x0010) status += "[LOCKED_OUT] ";
-        if (uac & 0x0020) status += "[PASSWD_NOTREQD] ";
-        if (uac & 0x10000) status += "[DONT_EXPIRE_PASSWD] ";
-        if (uac & 0x80000) status += "[TRUSTED_FOR_DELEGATION] ";
-        
+        if (uac & UacFlag::Disabled)             status += "[DISABLED] ";
+        if (uac & UacFlag::LockedOut)            status += "[LOCKED_OUT] ";
+        if (uac & UacFlag::PasswdNotRequired)    status += "[PASSWD_NOTREQD] ";
+        if (uac & UacFlag::DontExpirePassword)   status += "[DONT_EXPIRE_PASSWD] ";
+        if (uac & UacFlag::TrustedForDelegation) status += "[TRUSTED_FOR_DELEGATION] ";
+
         return status.empty() ? "Normal (Enabled)" : status;
     } catch (...) { return uacStr; }
 }
@@ -108,12 +124,12 @@ SingleLDAPResult Analysis::Whoami::fetchCurrentUser(
 void Analysis::Whoami::displayUserMetadata(const SingleLDAPResult& userData) const {
     printAttribute(userData, "distinguishedName", "Distinguished Name");
     printAttribute(userData, "description",       "Description");
-    
-    printAttribute(userData, "objectSid",         "SID", false, false, true); 
-    
-    printAttribute(userData, "userAccountControl", "Account Status", false, true);
-    printAttribute(userData, "pwdLastSet",         "Password Last Set", true);
-    printAttribute(userData, "lastLogon",          "Last Logon", true);
+
+    printAttribute(userData, "objectSid",         "SID",             AttrFormat::Sid);
+
+    printAttribute(userData, "userAccountControl", "Account Status", AttrFormat::Uac);
+    printAttribute(userData, "pwdLastSet",         "Password Last Set", AttrFormat::Date);
+    printAttribute(userData, "lastLogon",          "Last Logon",     AttrFormat::Date);
 
     if (userData.count("adminCount") && !userData.at("adminCount").empty()) {
         if (userData.at("adminCount").front() == "1") {
@@ -141,29 +157,30 @@ void Analysis::Whoami::displayGroupMembership(const SingleLDAPResult& userData) 
 }
 
 void Analysis::Whoami::printAttribute(
-    const SingleLDAPResult& data, 
-    const std::string& key, 
-    const std::string& label, 
-    bool isDate, 
-    bool isUAC,
-    bool isSid
+    const SingleLDAPResult& data,
+    const std::string& key,
+    const std::string& label,
+    AttrFormat format
 ) const {
-    if (!data.count(key) || data.at(key).empty()) 
+    if (!data.count(key) || data.at(key).empty())
         return;
 
     std::string val = data.at(key).front();
-    
-    if (isDate) {
-        val = filetimeToString(val); 
+
+    switch (format) {
+        case AttrFormat::Date:
+            val = filetimeToString(val);
+            break;
+        case AttrFormat::Uac:
+            val = decodeUAC(val) + " (" + val + ")";
+            break;
+        case AttrFormat::Sid:
+            val = AclService::sidToString(AclService::decodeData(val));
+            break;
+        case AttrFormat::Raw:
+            break;
     }
-    if (isUAC) {
-        val = decodeUAC(val) + " (" + val + ")";
-    }
-    if (isSid) {
-        auto sidBytes = AclService::decodeData(val);
-        val = AclService::sidToString(sidBytes);
-    }
-    
+
     std::cout << std::left << std::setw(20) << label << ": " << val << "\n";
 }
 

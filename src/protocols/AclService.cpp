@@ -145,7 +145,6 @@ inline Security::Ace AclService::createAceFromSambaAce(struct security_ace* samb
     Security::Ace ace;
     ace.trusteeSid = sambaSidToString(&sambaAce->trustee);
     ace.rawAccessMask = sambaAce->access_mask;
-    ace.isAllow = true;
     ace.isInherited = (sambaAce->flags & SEC_ACE_FLAG_INHERITED_ACE);
     
     return ace;
@@ -224,8 +223,9 @@ void AclService::addChildManagementRights(uint32_t mask, std::vector<std::string
 }
 
 void AclService::addFullControlIfApplicable(uint32_t mask, std::vector<std::string>& rights) {
-    constexpr uint32_t FULL_CONTROL_MASK = 0x000F003F;
-    
+    constexpr uint32_t FULL_CONTROL_MASK =
+        static_cast<uint32_t>(Security::AccessRight::FullControl);
+
     if ((mask & FULL_CONTROL_MASK) == FULL_CONTROL_MASK) {
         bool alreadyHasGenericAll = std::find(
             rights.begin(), 

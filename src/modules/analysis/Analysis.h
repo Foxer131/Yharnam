@@ -33,18 +33,19 @@ namespace Analysis {
         LdapQuerier& ldap;
         std::string username;
 
+        // How a raw LDAP attribute value should be rendered for display.
+        enum class AttrFormat { Raw, Date, Uac, Sid };
+
         SingleLDAPResult fetchCurrentUser(const std::string& shortUser, const std::string& baseDN);
-        
+
         void displayUserMetadata(const SingleLDAPResult& userData) const;
         void displayGroupMembership(const SingleLDAPResult& userData) const;
-        
+
         void printAttribute(
-            const SingleLDAPResult& data, 
-            const std::string& key, 
-            const std::string& label, 
-            bool isDate = false, 
-            bool isUAC = false,
-            bool isSid = false
+            const SingleLDAPResult& data,
+            const std::string& key,
+            const std::string& label,
+            AttrFormat format = AttrFormat::Raw
         ) const;
         std::string resolvePrimaryGroup(const std::string& rid) const;
 

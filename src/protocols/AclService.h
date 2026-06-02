@@ -27,9 +27,8 @@ namespace Security {
     struct Ace {
         std::string trusteeSid;
         uint32_t rawAccessMask;
-        bool isAllow;
         bool isInherited;
-        
+
         bool hasRight(AccessRight right) const {
             return (rawAccessMask & static_cast<uint32_t>(right)) == static_cast<uint32_t>(right);
         }
