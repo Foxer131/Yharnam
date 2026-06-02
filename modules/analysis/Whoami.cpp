@@ -5,6 +5,7 @@
 #include <algorithm>
 #include "Analysis.h"
 #include "../../utils/Colors.h"
+#include "../../utils/StringUtils.h"
 #include "../../protocols/AclService.h"
 
 static std::string filetimeToString(const std::string& filetimeStr) {
@@ -61,20 +62,7 @@ Analysis::Whoami::Whoami(LdapQuerier& ldap_, const std::string& username_)
 void Analysis::Whoami::run(const ModuleRuntimeContext& ctx) {
     std::cout << "[*] Querying LDAP for current user metadata..." << std::endl;
 
-    std::string shortUsername = extractShortUsername(username);
-
-    std::string query = "(sAMAccountName=" + shortUsername + ")";
-    std::vector<std::string> attributes = {
-        "distinguishedName",
-        "description",
-        "memberOf",          
-        "pwdLastSet",        
-        "lastLogon",         
-        "adminCount",        
-        "userAccountControl",
-        "primaryGroupID",
-        "objectSid"
-    };
+    std::string shortUsername = StringUtils::shortUsername(username);
 
     auto whoami_data = fetchCurrentUser(shortUsername, ctx.baseDN);
     
@@ -198,9 +186,3 @@ std::string Analysis::Whoami::resolvePrimaryGroup(const std::string& rid) const 
     return "RID-" + rid;
 }
 
-std::string Analysis::Whoami::extractShortUsername(const std::string& fullUsername) const {
-    size_t pos = fullUsername.find("@");
-    if (pos != std::string::npos)
-        return fullUsername.substr(0, pos);
-    return fullUsername;
-}

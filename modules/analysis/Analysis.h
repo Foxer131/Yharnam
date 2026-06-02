@@ -33,7 +33,6 @@ namespace Analysis {
         LdapQuerier& ldap;
         std::string username;
 
-        std::string extractShortUsername(const std::string& fullUsername) const;
         SingleLDAPResult fetchCurrentUser(const std::string& shortUser, const std::string& baseDN);
         
         void displayUserMetadata(const SingleLDAPResult& userData) const;
@@ -93,7 +92,6 @@ namespace Analysis {
             
         std::string buildUserEnumerationQuery() const;
         std::vector<std::string> extractUserNamesFromResults(const LDAPResult& results) const;
-        std::string extractShortUsername(const std::string& fullUsername) const;
         std::string getUserDistinguishedName(const std::string& username, const std::string& baseDN);
         
         void collectUserSids(const std::string& userDN);

@@ -5,8 +5,9 @@
 #include <sstream>
 #include <set>
 #include <algorithm>
-#include "Analysis.h" 
+#include "Analysis.h"
 #include "../../utils/Colors.h"
+#include "../../utils/StringUtils.h"
 
 static const char* getPermissionColor(const std::string& perm) {
     if (perm == "GenericAll" || perm == "WriteDacl" || perm == "WriteOwner" || perm == "FullControl") {
@@ -59,7 +60,7 @@ std::vector<std::string> Analysis::FindAcls::enumerateAllUsers(const std::string
 }
 
 void Analysis::FindAcls::populateMySids(const std::string& baseDN) {
-    std::string shortUsername = extractShortUsername(myUsername);
+    std::string shortUsername = StringUtils::shortUsername(myUsername);
     std::string userDN = getUserDistinguishedName(shortUsername, baseDN);
     
     if (userDN.empty()) {
@@ -260,14 +261,6 @@ std::vector<std::string> Analysis::FindAcls::extractUserNamesFromResults(
     return users;
 }
 
-inline std::string Analysis::FindAcls::extractShortUsername(const std::string& fullUsername) const {
-    size_t atPos = fullUsername.find('@');
-    if (atPos != std::string::npos) {
-        return fullUsername.substr(0, atPos);
-    }
-    return fullUsername;
-}
-
 std::string Analysis::FindAcls::getUserDistinguishedName(
     const std::string& username,
     const std::string& baseDN
@@ -312,7 +305,7 @@ void Analysis::FindAcls::addUserPrimarySid(const SingleLDAPResult& userEntry) {
     
     mySids.insert(sid);
     
-    std::string shortUsername = extractShortUsername(myUsername);
+    std::string shortUsername = StringUtils::shortUsername(myUsername);
     sidNameCache[sid] = shortUsername;
 }
 
