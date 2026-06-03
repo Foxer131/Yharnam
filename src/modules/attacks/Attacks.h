@@ -28,12 +28,13 @@ namespace Attacks {
 
     class ASREPRoast : public Module{
         LdapQuerier& ldap;
+        KerberosInteraction& krb;
 
         std::string extractDomainFromDN(const std::string& baseDN);
         public:
-        ASREPRoast(LdapQuerier& ldap);
+        ASREPRoast(LdapQuerier& ldap_, KerberosInteraction& krb_);
         std::vector<std::string> listUser(const std::string& baseDN);
-        bool requestTicket(const std::string& vuln_user, const std::string& domain);
+        std::string requestTicket(const std::string& vulnUser, const std::string& realm, const std::string& kdcHost);
 
         std::string getName() const override { return "ASREPRoast"; }
         void run(const ModuleRuntimeContext& ctx) override;

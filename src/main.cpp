@@ -56,9 +56,10 @@ int main(int argc, char* argv[]) {
         if (module_running) {
             std::string baseDN = parser.makeBaseDN();
             ModuleRuntimeContext runtimeCtx(
-                ldap_connection, 
+                ldap_connection,
                 baseDN,
-                parser.getFilePath()
+                parser.getFilePath(),
+                targetIP
             );
 
             module_running->run(runtimeCtx);

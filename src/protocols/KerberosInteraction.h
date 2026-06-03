@@ -47,6 +47,16 @@ public:
     static std::string formatTicket_TGS(krb5_context ctx, const krb5_creds& creds);
     static std::string formatTicket_TGT(krb5_context ctx, const krb5_creds& creds);
 
+    // Formats an AS-REP enc-part cipher (etype + raw bytes) into a crackable
+    // hash: RC4 (23) -> hashcat -m 18200; AES (17/18) -> john --format=krb5asrep.
+    static std::string formatASREP(
+        const std::string& username,
+        const std::string& realm,
+        krb5_enctype etype,
+        const unsigned char* cipher,
+        size_t cipherLen
+    );
+
 private:
     static std::string principal_to_string(krb5_context context, krb5_principal principal);
     static void split_principal(const std::string& full_principal, std::string& name, std::string& realm);
@@ -86,6 +96,13 @@ private:
         const std::string& checksumHex,
         const std::string& encDataHex
     );
+
+    static std::string buildASREPHashAES(
+        const std::string& salt,
+        krb5_enctype etype,
+        const std::string& edata2Hex,
+        const std::string& checksumHex
+    );
 };
 
 class KerberosInteraction {
@@ -96,12 +113,22 @@ public:
     
     bool requestAndCacheTGT(const std::string& username, const std::string& password);
     std::unique_ptr<krb5_creds, Krb5UserCredsDeleter> requestRawTGT(
-        const std::string& username, 
+        const std::string& username,
         const std::string& password
     );
     bool cacheTicket(const krb5_creds& creds, const std::string& username);
-    
+
     std::string requestAndFormatTGS(const std::string& spn, const std::string& user_requesting);
+
+    // AS-REP roasting: requests a TGT for a pre-auth-disabled account WITHOUT a
+    // password by sending an AS-REQ with no pre-auth to the KDC and harvesting
+    // the AS-REP enc-part. Offers AES+RC4; returns a $krb5asrep$ hash (RC4 ->
+    // hashcat, AES -> JtR), or "" on failure.
+    std::string requestAndFormatASREP(
+        const std::string& username,
+        const std::string& realm,
+        const std::string& kdcHost
+    );
 
 private:
     std::unique_ptr<std::remove_pointer_t<krb5_context>, Krb5ContextDeleter> context_;

@@ -7,6 +7,9 @@ a `whoami` privilege dump.
 
 > For authorized security testing and lab use only.
 
+Contributing (or using an AI agent on this repo)? Read **[CLAUDE.md](CLAUDE.md)**
+for the architecture map, conventions, and gotchas.
+
 ## Features
 
 | Module        | Flag             | Description                                                    |
@@ -64,6 +67,32 @@ Examples:
 ```
 
 Run with no arguments (or `-h`) for the full help text.
+
+## AS-REP roasting notes
+
+`--asreproast` is fully native (no `impacket`): Yharnam sends a no-pre-auth
+AS-REQ to the DC on TCP/88 and harvests the AS-REP, producing a
+`hashcat -m 18200` hash. Two requirements:
+
+- The target account must have an **RC4** Kerberos key.
+- The local MIT krb5 must permit RC4. Add to `/etc/krb5.conf`:
+  ```ini
+  [libdefaults]
+      allow_weak_crypto = true
+  ```
+
+Crack with: `hashcat -m 18200 hashes.txt wordlist.txt`.
+
+AES (etype 17/18) AS-REP output is a planned follow-up.
+
+## Architecture
+
+A one-screen map of the codebase, the module data flow, and the project
+conventions lives in **[CLAUDE.md](CLAUDE.md)**. In short: `main` wires
+`CLI -> connect -> login -> module.run()`; modules implement the `Module`
+interface and **self-register** with `ModuleRegistry`; protocol services
+(`LdapConnection`, `KerberosInteraction`, `KdcClient`, `AclService`) are split
+by responsibility; AD constants live in `core/ActiveDirectory.h`.
 
 ## Project layout
 
