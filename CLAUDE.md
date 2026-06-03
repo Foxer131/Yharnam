@@ -100,15 +100,24 @@ If a module needs new run-time input, add a field to `ModuleRuntimeContext`
   and reports "`core/Module.h` not found". The CMake build is the source of
   truth. Ignore those; trust `cmake --build`.
 - **AS-REP roast etypes**: `requestAndFormatASREP` offers AES256/AES128/RC4 in
-  the AS-REQ; the KDC returns the strongest key the account holds. AES (17/18)
-  hashes crack with `john --format=krb5asrep` (hashcat has no AES AS-REP mode);
-  RC4 (23) with `hashcat -m 18200` (RC4 needs an RC4 key on the account and
-  `allow_weak_crypto = true` under `[libdefaults]` in `/etc/krb5.conf`). The AES
-  salt is assumed to be the AD default `UPPER(REALM)+sAMAccountName`; accounts
-  with a custom Kerberos salt produce a hash JtR cannot crack.
-- **Kerberos transport is manual**: we build the AS-REQ with
-  `krb5_init_creds_step` but do our own TCP to the DC (`KdcClient`), so no
-  `krb5.conf` realm/KDC mapping is required.
+  the AS-REQ; the KDC returns the strongest key the account holds (a modern AD
+  account yields AES256 = etype 18). AES (17/18) hashes crack with
+  `john --format=krb5asrep` (hashcat has no AES AS-REP mode); RC4 (23) with
+  `hashcat -m 18200`. The AES salt is assumed to be the AD default
+  `UPPER(REALM)+sAMAccountName`; accounts with a custom Kerberos salt produce a
+  hash JtR cannot crack. Verified end-to-end against a Windows Server 2019 DC.
+- **AS-REQ is hand-built (no padata)**: `requestAndFormatASREP` hand-rolls a
+  minimal DER AS-REQ (`buildBareAsReq`) rather than using `krb5_init_creds_step`.
+  MIT's step machinery injects freshness / PAC-options pre-auth padata (types
+  149/150) that makes a Windows KDC demand pre-authentication even from a
+  `DONT_REQ_PREAUTH` account — so roasting only works with a bare request (the
+  way impacket/Rubeus build it). Because we encode the etype list ourselves, the
+  request is not subject to local `krb5.conf` `permitted_enctypes` /
+  `allow_weak_crypto` policy.
+- **Kerberos transport is manual**: AS-REP roasting hand-builds the AS-REQ and
+  does its own TCP to the DC (`KdcClient`, which frames the 4-byte length
+  prefix), so no `krb5.conf` realm/KDC mapping is required. The TGT/TGS paths
+  still use the krb5 creds API.
 - **Samba headers are C**: `AclService.cpp` includes them under `extern "C"`.
 
 ## Git / reversibility
