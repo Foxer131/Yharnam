@@ -47,8 +47,8 @@ public:
     static std::string formatTicket_TGS(krb5_context ctx, const krb5_creds& creds);
     static std::string formatTicket_TGT(krb5_context ctx, const krb5_creds& creds);
 
-    // Builds a hashcat -m 18200 string directly from an AS-REP enc-part cipher
-    // (etype + raw cipher bytes), as harvested during AS-REP roasting.
+    // Formats an AS-REP enc-part cipher (etype + raw bytes) into a crackable
+    // hash: RC4 (23) -> hashcat -m 18200; AES (17/18) -> john --format=krb5asrep.
     static std::string formatASREP(
         const std::string& username,
         const std::string& realm,
@@ -96,6 +96,13 @@ private:
         const std::string& checksumHex,
         const std::string& encDataHex
     );
+
+    static std::string buildASREPHashAES(
+        const std::string& salt,
+        krb5_enctype etype,
+        const std::string& edata2Hex,
+        const std::string& checksumHex
+    );
 };
 
 class KerberosInteraction {
@@ -115,7 +122,8 @@ public:
 
     // AS-REP roasting: requests a TGT for a pre-auth-disabled account WITHOUT a
     // password by sending an AS-REQ with no pre-auth to the KDC and harvesting
-    // the AS-REP enc-part. Returns a hashcat -m 18200 hash, or "" on failure.
+    // the AS-REP enc-part. Offers AES+RC4; returns a $krb5asrep$ hash (RC4 ->
+    // hashcat, AES -> JtR), or "" on failure.
     std::string requestAndFormatASREP(
         const std::string& username,
         const std::string& realm,

@@ -685,6 +685,20 @@ std::string KerberosTicketFormatter::buildASREPHash(
     return ss_hash.str();
 }
 
+std::string KerberosTicketFormatter::buildASREPHashAES(
+    const std::string& salt,
+    krb5_enctype etype,
+    const std::string& edata2Hex,
+    const std::string& checksumHex
+) {
+    // JtR krb5asrep AES layout: $krb5asrep$<etype>$<salt>$<edata2>$<checksum>
+    std::stringstream ss_hash;
+    ss_hash << "$krb5asrep$" << etype << "$"
+            << salt << "$"
+            << edata2Hex << "$" << checksumHex;
+    return ss_hash.str();
+}
+
 std::string KerberosTicketFormatter::formatASREP(
     const std::string& username,
     const std::string& realm,
@@ -698,9 +712,20 @@ std::string KerberosTicketFormatter::formatASREP(
         return "";
     }
 
-    // For RC4-HMAC the 16-byte HMAC checksum precedes the encrypted data.
-    std::string checksumHex = to_hex(cipher, checksumSize);
-    std::string encDataHex = to_hex(cipher + checksumSize, cipherLen - checksumSize);
+    if (etype == ENCTYPE_AES128_CTS_HMAC_SHA1_96 ||
+        etype == ENCTYPE_AES256_CTS_HMAC_SHA1_96) {
+        // AES-CTS-HMAC-SHA1-96: the 12-byte HMAC tag trails the ciphertext.
+        // Salt is UPPER(REALM) + username with no separator (AD default salt;
+        // accounts with a custom Kerberos salt won't crack -- see CLAUDE.md).
+        std::string edata2Hex  = to_hex(cipher, cipherLen - checksumSize);
+        std::string checksumHex = to_hex(cipher + cipherLen - checksumSize, checksumSize);
+        std::string realmUpper = realm;
+        std::transform(realmUpper.begin(), realmUpper.end(), realmUpper.begin(), ::toupper);
+        return buildASREPHashAES(realmUpper + username, etype, edata2Hex, checksumHex);
+    }
 
+    // RC4-HMAC (etype 23): the 16-byte HMAC checksum precedes the encrypted data.
+    std::string checksumHex = to_hex(cipher, checksumSize);
+    std::string encDataHex  = to_hex(cipher + checksumSize, cipherLen - checksumSize);
     return buildASREPHash(username, realm, etype, checksumHex, encDataHex);
 }
