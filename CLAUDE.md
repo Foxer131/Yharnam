@@ -99,10 +99,13 @@ If a module needs new run-time input, add a field to `ModuleRuntimeContext`
 - **Editor diagnostics lie**: clang intellisense (`.vscode`) doesn't know `-Isrc`
   and reports "`core/Module.h` not found". The CMake build is the source of
   truth. Ignore those; trust `cmake --build`.
-- **AS-REP roast needs RC4**: `requestAndFormatASREP` requests `ENCTYPE_ARCFOUR_HMAC`
-  so the hash fits `hashcat -m 18200`. The local krb5 must permit it —
-  `allow_weak_crypto = true` under `[libdefaults]` in `/etc/krb5.conf` — and the
-  target account must have an RC4 key. AES AS-REP is a planned follow-up.
+- **AS-REP roast etypes**: `requestAndFormatASREP` offers AES256/AES128/RC4 in
+  the AS-REQ; the KDC returns the strongest key the account holds. AES (17/18)
+  hashes crack with `john --format=krb5asrep` (hashcat has no AES AS-REP mode);
+  RC4 (23) with `hashcat -m 18200` (RC4 needs an RC4 key on the account and
+  `allow_weak_crypto = true` under `[libdefaults]` in `/etc/krb5.conf`). The AES
+  salt is assumed to be the AD default `UPPER(REALM)+sAMAccountName`; accounts
+  with a custom Kerberos salt produce a hash JtR cannot crack.
 - **Kerberos transport is manual**: we build the AS-REQ with
   `krb5_init_creds_step` but do our own TCP to the DC (`KdcClient`), so no
   `krb5.conf` realm/KDC mapping is required.
@@ -119,7 +122,7 @@ If a module needs new run-time input, add a field to `ModuleRuntimeContext`
 ## Roadmap (feature/module-expansion)
 
 - [x] Native AS-REP roast (replaced impacket `system()` call)
-- [ ] AES (etype 17/18) AS-REP hash formatting — verify byte layout vs hashcat
+- [x] AES (etype 17/18) AS-REP hash formatting (crack with `john --format=krb5asrep`)
 - [ ] Targeted Kerberoast: `--kerberoast <user>` for a single SPN
 - [ ] Deeper ACL search: parse `ACCESS_ALLOWED_OBJECT` ObjectType GUIDs
       (User-Force-Change-Password, Self-Membership, write-to-property)
